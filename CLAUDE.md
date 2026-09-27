@@ -74,6 +74,10 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 
 **Changes go through pull requests.**
 - `main` is protected by a ruleset with no bypass: PRs only, squash merge, linear history, signed commits.
+- **Every commit on a PR branch must be signed**, not just the squash commit. GitHub checks the branch's commits too, and one unsigned commit blocks the merge.
+  - Commits are signed automatically with the user's SSH signing key (global git config: `gpg.format ssh`, `commit.gpgsign true`, and the author email is the GitHub no-reply address).
+  - Never pass `--no-gpg-sign` or override `user.email`.
+  - If signing fails, the key probably isn't loaded in the agent. Ask the user to run `ssh-add --apple-use-keychain ~/.ssh/id_ed25519_signing`.
 - Work on a branch named `tp-N/short-description`.
 - Don't push, open PRs, or merge without the user's go-ahead.
 

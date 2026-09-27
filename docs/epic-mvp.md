@@ -106,7 +106,7 @@ Recommendation: one container per environment.
 **Decided:**
 - Automated PR review: reuse the app repo's DeepSeek/OpenRouter workflow, added in the CI PR (D-011).
 - Repository security (applied 2026-09-27), based on the app repo's ruleset plus hardening for a repo whose CI can change GCP:
-  - Ruleset on `main` with no bypass actors, not even admins: no deletion, no force push, linear history, signed commits, and pull requests required (0 approvals, squash only).
+  - Ruleset on `main` with no bypass actors, not even admins: no deletion, no force push, linear history, signed commits, and pull requests required (0 approvals, squash only). Signed commits cover every commit on a PR branch, so commits are signed locally with an SSH signing key (set up 2026-09-27).
   - Squash merges only, branches deleted after merge, auto-merge off.
   - Actions: only GitHub-owned actions plus `google-github-actions/*`, `hashicorp/*`, and `jdx/mise-action`. Every action must be pinned to a full commit SHA. Fork PRs from any outside contributor need approval before workflows run. The workflow token is read-only by default and can't approve PRs.
   - Dependabot alerts and security updates, secret scanning with push protection, and private vulnerability reporting are all on.

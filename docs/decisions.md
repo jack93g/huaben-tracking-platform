@@ -72,7 +72,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Decision:**
   - **Ruleset on `main`, with no bypass actors (not even admins):**
     - no deletion and no force pushes;
-    - linear history and signed commits;
+    - linear history and signed commits. This applies to every commit on a PR branch, not only the squash commit GitHub creates: unsigned branch commits block the merge. Commits are signed locally with an SSH signing key registered on GitHub, and the author email is the GitHub no-reply address;
     - changes only through pull requests, with 0 approvals and squash-merge only.
   - **GitHub Actions:**
     - only GitHub-owned actions, `google-github-actions/*`, `hashicorp/*`, and `jdx/mise-action` may run;
