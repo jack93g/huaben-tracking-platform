@@ -1,0 +1,28 @@
+# Install the git hook once per clone: `pre-commit install`
+# Hook repos are pinned to commit SHAs (`pre-commit autoupdate --freeze`).
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: 253d99053f80e4a368175e93b36edb662e7e5135  # frozen: v1.109.1
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+
+  # Uses the gitleaks version pinned in mise.toml rather than building it from source.
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (staged changes)
+        entry: gitleaks git --pre-commit --staged --redact --no-banner
+        language: system
+        pass_filenames: false
