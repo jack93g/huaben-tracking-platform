@@ -1,0 +1,14 @@
+# Pinned tool versions for local development and CI (jdx/mise-action reads this file).
+# Run `mise install` after cloning or after changing a version here.
+
+[tools]
+terraform = "1.16.4"
+tflint = "0.64.0"
+gitleaks = "8.30.1"
+# dbt-bigquery supports Python up to 3.13.
+python = "3.13.15"
+uv = "0.12.19"
+
+[env]
+# Create and activate the project virtualenv (managed by uv) on `cd`.
+_.python.venv = { path = ".venv", create = true }

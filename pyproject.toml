@@ -1,0 +1,12 @@
+[project]
+name = "huaben-tracking-platform"
+version = "0.1.0"
+description = "Server-side tracking platform for Huaben: GTM, sGTM on Cloud Run, BigQuery, and dbt."
+readme = "README.md"
+requires-python = "==3.13.*"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.2",
+]
