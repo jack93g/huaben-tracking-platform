@@ -54,6 +54,21 @@ Recommendation: one container per environment.
   - pre-commit with `terraform fmt` and `gitleaks`
   - README skeleton
   - `docs/decisions.md`
+  - `CLAUDE.md`: the repo's purpose, commands (mise, uv, pre-commit, Terraform), layout, and working rules. The rules to capture:
+    - the repo is public, so no account names, organization or billing IDs, or secrets;
+    - every change goes through a PR;
+    - actions are pinned to SHAs and must be on the allowlist;
+    - no service account keys;
+    - the bootstrap is applied locally only;
+    - decisions are recorded in `docs/decisions.md`;
+    - `TP-n` ticket naming.
+- Automated PR review. A workflow reviews each PR with an LLM and posts comments. The workflow must:
+  - run only on same-repo PRs, and skip forks and Dependabot;
+  - check out the **base** SHA, never the PR's code, and fetch the diff through the API, so a PR can't change the workflow to steal its secret;
+  - have only `contents: read` and `pull-requests: write` permissions, **never `id-token: write`**, so it can't reach GCP;
+  - pin actions to SHAs;
+  - keep the LLM API key as a repository secret;
+  - be advisory, never a required status check.
 - **Identity and organization setup** (manual, before the bootstrap):
   - Sign up for Cloud Identity Free on `huaben.app` and verify the domain with a TXT record in Cloudflare.
   - Accounts: two super admins (one for administration only, one break-glass account whose credentials are kept offline) and a separate day-to-day account for GCP work. **Individual account names are deliberately left out of this public repo and its issues.**
@@ -87,6 +102,14 @@ Recommendation: one container per environment.
   - add the required status checks (pre-commit, plus the dev and prod plans) with "branches must be up to date" once the workflows have run;
   - create the `dev` and `prod` GitHub Environments: deploy from `main` only, `prod` requires your approval, and the Cloudflare token is a `prod`-only secret;
   - add `.github/dependabot.yml` for GitHub Actions, Terraform providers, and Python (uv), and pin every action to a commit SHA.
+
+**Open:**
+- **Which reviewer.**
+  - Reuse the app repo's `openrouter-review.yml` and its script (DeepSeek via OpenRouter). It's already built and cheap, and keeps both repos consistent.
+  - Use the Claude Code GitHub Action (`anthropics/claude-code-action`). It's official, can read `CLAUDE.md` for context, and needs an Anthropic API key and an allowlist entry.
+  - Use GitHub Copilot code review through a ruleset rule. No workflow, but it needs a Copilot plan.
+
+  Recommendation: reuse the app repo's workflow. Its security pattern (base-SHA checkout, skipping forks and Dependabot, minimal permissions) is already right, and switching reviewers later is a small change.
 
 **Decided:**
 - Repository security (applied 2026-09-27), based on the app repo's ruleset plus hardening for a repo whose CI can change GCP:

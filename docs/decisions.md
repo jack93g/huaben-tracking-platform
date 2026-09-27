@@ -113,6 +113,7 @@ These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
+| Automated PR reviewer: the app repo's OpenRouter workflow, Claude Code Action, or Copilot | TP-0 | Reuse the app repo's workflow |
 | Web GTM across environments: one container with GTM Environments, or one per environment | TP-2 | One container with Environments |
 | Server GTM across environments | TP-3 | One container per environment |
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
