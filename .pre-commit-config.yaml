@@ -17,6 +17,9 @@ repos:
     hooks:
       - id: terraform_fmt
       - id: terraform_validate
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
 
   # Uses the gitleaks version pinned in mise.toml rather than building it from source.
   - repo: local

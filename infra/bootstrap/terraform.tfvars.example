@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# org_id:             gcloud organizations list
+# billing_account_id: gcloud billing accounts list
+org_id             = "000000000000"
+billing_account_id = "000000-000000-000000"

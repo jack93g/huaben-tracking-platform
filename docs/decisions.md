@@ -115,12 +115,46 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:** It's already built, tested, and cheap, and its security pattern is right: it checks out the base SHA and fetches the diff through the API, skips forks and Dependabot, and has minimal permissions. Switching to another reviewer later is a small change.
 - **Consequences:** The workflow is added in the TP-0 CI PR. It must never have `id-token: write`. The `OPENROUTER_API_KEY` repository secret has to be created in this repo.
 
+### D-012: The bootstrap's state lives in the bucket it creates
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** The bootstrap stores its state in `huaben-tracking-platform-tfstate` under `bootstrap/`, the same bucket as the environments. The first run applies with local state and then runs `terraform init -migrate-state`.
+- **Why:** A state file kept only on a laptop is easy to lose. In the bucket it's versioned, and it's in the same place as everything else.
+- **Consequences:** The first run is a documented two-step procedure (`infra/bootstrap/README.md`).
+
+### D-013: CI identities: separate plan and apply accounts, tied to GitHub Environments
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** Each environment has two service accounts, both in the admin project.
+  - **`tf-plan-<env>`** is read-only (Viewer and Security Reviewer). Any workflow run in this repository can use it, so pull requests can run plans.
+  - **`tf-apply-<env>`** makes changes. Only jobs running in the matching GitHub Environment can use it; `prod` requires approval.
+  - The Workload Identity provider only accepts tokens from this repository, checked by numeric repository ID and owner ID rather than by name.
+  - On the state bucket, IAM conditions limit each account to its own `envs/<env>/` prefix: read-only for plan, read-write for apply.
+- **Why:**
+  - PR plans need credentials, but anything a PR can run shouldn't be able to change infrastructure.
+  - Numeric IDs can't be taken over through a repository rename.
+- **Consequences:**
+  - PR plans run with `-lock=false`, because the plan accounts can't write state locks.
+  - The apply accounts start with the roles needed to manage APIs, IAM, and service accounts, and gain more as later tickets add resources.
+  - Project IAM Admin means an apply account is effectively the admin of its own project, and only that project.
+
+### D-014: Development happens on a persistent `dev` branch
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** All work is committed to `dev`, and PRs go from `dev` into `main`. `dev` isn't deleted after merging.
+- **Why:** It matches the app repo's workflow.
+- **Consequences:** `main` only allows squash merges, so after each merge `dev` has to be brought back in line with `main`, or the next PR would show old commits again. See the open decision below.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
+| How `dev` stays in sync with `main` after a squash merge | TP-0 | Reset `dev` to `main` after each merge |
 | Web GTM across environments: one container with GTM Environments, or one per environment | TP-2 | One container with Environments |
 | Server GTM across environments | TP-3 | One container per environment |
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
