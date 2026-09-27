@@ -54,7 +54,7 @@ Recommendation: one container per environment.
   - pre-commit with `terraform fmt` and `gitleaks`
   - README skeleton
   - `docs/decisions.md`
-  - `CLAUDE.md`: the repo's purpose, commands (mise, uv, pre-commit, Terraform), layout, and working rules. The rules to capture:
+  - ~~`CLAUDE.md`~~ Done in the first TP-0 PR: the repo's purpose, commands (mise, uv, pre-commit, Terraform), layout, and working rules. The rules to capture:
     - the repo is public, so no account names, organization or billing IDs, or secrets;
     - every change goes through a PR;
     - actions are pinned to SHAs and must be on the allowlist;
@@ -62,7 +62,7 @@ Recommendation: one container per environment.
     - the bootstrap is applied locally only;
     - decisions are recorded in `docs/decisions.md`;
     - `TP-n` ticket naming.
-- Automated PR review. A workflow reviews each PR with an LLM and posts comments. The workflow must:
+- Automated PR review, added in the CI PR. It reuses the app repo's DeepSeek/OpenRouter workflow (D-011), reviews each PR, and posts comments. The workflow must:
   - run only on same-repo PRs, and skip forks and Dependabot;
   - check out the **base** SHA, never the PR's code, and fetch the diff through the API, so a PR can't change the workflow to steal its secret;
   - have only `contents: read` and `pull-requests: write` permissions, **never `id-token: write`**, so it can't reach GCP;
@@ -103,15 +103,8 @@ Recommendation: one container per environment.
   - create the `dev` and `prod` GitHub Environments: deploy from `main` only, `prod` requires your approval, and the Cloudflare token is a `prod`-only secret;
   - add `.github/dependabot.yml` for GitHub Actions, Terraform providers, and Python (uv), and pin every action to a commit SHA.
 
-**Open:**
-- **Which reviewer.**
-  - Reuse the app repo's `openrouter-review.yml` and its script (DeepSeek via OpenRouter). It's already built and cheap, and keeps both repos consistent.
-  - Use the Claude Code GitHub Action (`anthropics/claude-code-action`). It's official, can read `CLAUDE.md` for context, and needs an Anthropic API key and an allowlist entry.
-  - Use GitHub Copilot code review through a ruleset rule. No workflow, but it needs a Copilot plan.
-
-  Recommendation: reuse the app repo's workflow. Its security pattern (base-SHA checkout, skipping forks and Dependabot, minimal permissions) is already right, and switching reviewers later is a small change.
-
 **Decided:**
+- Automated PR review: reuse the app repo's DeepSeek/OpenRouter workflow, added in the CI PR (D-011).
 - Repository security (applied 2026-09-27), based on the app repo's ruleset plus hardening for a repo whose CI can change GCP:
   - Ruleset on `main` with no bypass actors, not even admins: no deletion, no force push, linear history, signed commits, and pull requests required (0 approvals, squash only).
   - Squash merges only, branches deleted after merge, auto-merge off.

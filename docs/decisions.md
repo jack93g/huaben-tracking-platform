@@ -107,13 +107,20 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:** There's no official Terraform support for GTM. The community providers have little adoption and no Google support.
 - **Consequences:** GTM changes are reviewed after they're published, not before. Revisit after the MVP.
 
+### D-011: Automated PR review reuses the app repo's DeepSeek workflow
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** PRs are reviewed by DeepSeek via OpenRouter, reusing the app repo's `openrouter-review.yml` workflow and its script. The review is advisory and never a required check.
+- **Why:** It's already built, tested, and cheap, and its security pattern is right: it checks out the base SHA and fetches the diff through the API, skips forks and Dependabot, and has minimal permissions. Switching to another reviewer later is a small change.
+- **Consequences:** The workflow is added in the TP-0 CI PR. It must never have `id-token: write`. The `OPENROUTER_API_KEY` repository secret has to be created in this repo.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
-| Automated PR reviewer: the app repo's OpenRouter workflow, Claude Code Action, or Copilot | TP-0 | Reuse the app repo's workflow |
 | Web GTM across environments: one container with GTM Environments, or one per environment | TP-2 | One container with Environments |
 | Server GTM across environments | TP-3 | One container per environment |
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
