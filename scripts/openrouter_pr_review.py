@@ -70,6 +70,22 @@ groups, service account keys, public access, workflows with more \
 permissions than they need (especially id-token: write outside the Terraform \
 workflows), actions not pinned to a full commit SHA, untrusted code running \
 with secrets
+- Privilege escalation by CI identities (infra/bootstrap/ci.tf and any IAM \
+for service accounts): roles that let an account grant itself more access \
+(Project IAM Admin without a modifiedGrantsByRole condition, Owner, Editor, \
+Security Admin, Service Account Token Creator, Service Account Admin or User \
+beyond what's needed); any role added before a resource in the diff needs it
+- Secrets in Terraform state or plan output: secret values passed as regular \
+attributes instead of write-only arguments (e.g. secret_data_wo) or ephemeral \
+resources, outputs exposing secrets, nonsensitive() on sensitive values. PR \
+plans run the PR's own code with state access and print to public logs.
+- Code that runs during terraform plan with CI credentials: external data \
+sources, local-exec or other provisioners, new data sources reading secrets \
+or state (e.g. terraform_remote_state)
+- Workflow trust boundaries: jobs that run PR-controlled code while holding \
+secrets or an OIDC token beyond the read-only plan accounts, apply jobs \
+reachable without their GitHub Environment, weakened branch or environment \
+conditions
 - Anything this public repo must not contain: account names, organization, \
 billing account or customer IDs, secrets or tokens
 - Terraform correctness: changes that would destroy or replace resources, \

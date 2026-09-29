@@ -17,13 +17,18 @@ locals {
       "roles/viewer",
       "roles/iam.securityReviewer",
     ]
-    # Extended as later tickets add resources (Cloud Run, BigQuery, Secret
-    # Manager, ...). Project IAM Admin lets this account grant itself further
-    # roles in its own project, so it's effectively admin of that project only.
+    # Least privilege: a role is added only when a ticket deploys something
+    # that needs it (Cloud Run, BigQuery, Secret Manager, ...). Never add an
+    # unconditioned Project IAM Admin: it would let the account grant itself
+    # any role. When project-level grants are needed, add it with an IAM
+    # condition on iam.googleapis.com/modifiedGrantsByRole listing only the
+    # low-privilege roles it may grant (D-013).
+    # Service Account Admin and User are project-wide for now, so the account
+    # can create and deploy as runtime service accounts (TP-3); narrow them to
+    # specific accounts once those exist.
     apply = [
       "roles/viewer",
       "roles/serviceusage.serviceUsageAdmin",
-      "roles/resourcemanager.projectIamAdmin",
       "roles/iam.serviceAccountAdmin",
       "roles/iam.serviceAccountUser",
     ]

@@ -137,8 +137,13 @@ This repository is public, so entries leave out individual account names, organi
   - Numeric IDs can't be taken over through a repository rename.
 - **Consequences:**
   - PR plans run with `-lock=false`, because the plan accounts can't write state locks.
-  - The apply accounts start with the roles needed to manage APIs, IAM, and service accounts, and gain more as later tickets add resources.
-  - Project IAM Admin means an apply account is effectively the admin of its own project, and only that project.
+  - **The apply accounts hold only what current deployments need:** Viewer, Service Usage Admin, and Service Account Admin and User. Roles are added as tickets need them.
+    - *Amended 2026-09-29 after a security review.* The first version also granted an unconditioned Project IAM Admin, which let an apply account give itself any role in its project, even though nothing needed it. It was removed.
+    - When project-level grants are needed, Project IAM Admin comes back only **with an IAM condition** on `iam.googleapis.com/modifiedGrantsByRole`, listing the low-privilege roles it may grant.
+    - Service Account Admin and User are project-wide for now, so TP-3 can create runtime service accounts and deploy as them. They're narrowed to specific accounts once those accounts exist.
+  - **PR plans run the PR's own Terraform code with the plan account's access.** That code can read the environment's state and print it into public logs, and plan-time code (data sources, `external`) can use the plan account's token. Today only the repo owner can open same-repo PRs, and anyone with write access could already merge. So:
+    - **secrets never go into Terraform state**: use write-only arguments (e.g. `secret_data_wo`) and ephemeral resources;
+    - if anyone else is given write access, PR plans must be gated behind an approval, e.g. a `plan` GitHub Environment with required reviewers.
   - The apply bindings match GitHub's **immutable subject** format, `repo:<owner>@<owner_id>/<repo>@<repo_id>:environment:<env>`, which this repo uses (check with `GET /repos/{repo}/actions/oidc/customization/sub`). The first version matched the older `repo:<owner>/<repo>:…` format, so no apply job could authenticate until it was fixed (2026-09-29).
 
 ### D-014: Development happens on a persistent `dev` branch

@@ -97,6 +97,9 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 - Environments are applied by CI: dev on merge to `main`, prod after approval in the `prod` GitHub Environment. A branch can also be deployed to dev manually, before merging, to try it out.
 - Commit `.terraform.lock.hcl`, and pin provider versions.
 - `*.tfvars` files are gitignored.
+- **No secrets in Terraform state.** PR plans run the PR's own code with read access to state and print to public logs (D-013). Pass secrets with write-only arguments (e.g. `secret_data_wo`) or ephemeral resources, never as regular attributes or outputs.
+- **CI apply accounts get the least privilege a deployment needs.** Add a role in `infra/bootstrap/ci.tf` only when a ticket needs it. Never grant an unconditioned Project IAM Admin, Owner, Editor, or Service Account Token Creator. Project-level grants go through Project IAM Admin with a `modifiedGrantsByRole` condition listing the allowed roles.
+- Don't add `external` data sources, `local-exec` provisioners, or other code that runs during `plan`, without flagging it to the user: it runs with CI credentials on every PR.
 
 **IAM changes that grant or remove access are made by the user, not by you.** Give them the exact command or console steps, then verify the result afterwards.
 
