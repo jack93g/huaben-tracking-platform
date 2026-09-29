@@ -62,7 +62,7 @@ Recommendation: one container per environment.
     - the bootstrap is applied locally only;
     - decisions are recorded in `docs/decisions.md`;
     - `TP-n` ticket naming.
-- Automated PR review, added in the CI PR. It reuses the app repo's DeepSeek/OpenRouter workflow (D-011), reviews each PR, and posts comments. The workflow must:
+- ~~Automated PR review~~ Done in the TP-0 CI PR (`pr-review.yml`), needing the `OPENROUTER_API_KEY` repository secret. It reuses the app repo's DeepSeek/OpenRouter workflow (D-011), reviews each PR, and posts comments. The workflow must:
   - run only on same-repo PRs, and skip forks and Dependabot;
   - check out the **base** SHA, never the PR's code, and fetch the diff through the API, so a PR can't change the workflow to steal its secret;
   - have only `contents: read` and `pull-requests: write` permissions, **never `id-token: write`**, so it can't reach GCP;
@@ -98,7 +98,7 @@ Recommendation: one container per environment.
   - Use two CI service accounts per environment: a read-only one for `plan` on pull requests, and one for `apply` that trusts only `main` (dev) or the `prod` GitHub Environment.
   - Mark sensitive Terraform variables and outputs `sensitive`, and never echo secrets in workflow steps.
   - Pull requests from forks get no OIDC token, so they can't plan against GCP. That's intended.
-- ~~Protect `main`~~ Done 2026-09-27 (repository ruleset "Protect main"). Still to do in this ticket:
+- ~~Protect `main`~~ Done 2026-09-27 (repository ruleset "Protect main"). The follow-up items below were done in the TP-0 CI PR (2026-09-29, D-016). The required checks (`pre-commit`, `plan (dev)`, `plan (prod)`, with branches up to date) were added to the ruleset once the workflows had passed:
   - add the required status checks (pre-commit, plus the dev and prod plans) with "branches must be up to date" once the workflows have run;
   - create the `dev` and `prod` GitHub Environments. `dev` deploys automatically from `main`, and also accepts manually triggered deployments from any branch so a change can be tried before merging (D-015). `prod` deploys only from `main`, requires your approval, and holds the Cloudflare token as a `prod`-only secret;
   - add `.github/dependabot.yml` for GitHub Actions, Terraform providers, and Python (uv), and pin every action to a commit SHA.

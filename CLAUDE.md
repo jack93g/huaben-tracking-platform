@@ -52,6 +52,8 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 | `contract/` | The machine-readable tracking contract, the single source for the BigQuery schema, dbt tests, and Pydantic models |
 | `gtm/` | Exported GTM container versions (JSON), written by a CI job, not by hand |
 | `dbt/` | The dbt project |
+| `.github/workflows/` | `checks.yml` (pre-commit and a gitleaks history scan), `terraform.yml` (plans on PRs; applies dev then prod), `pr-review.yml` (advisory DeepSeek review) |
+| `scripts/` | Helper scripts, e.g. `openrouter_pr_review.py` (the PR reviewer, adapted from the app repo) |
 
 ## GCP
 

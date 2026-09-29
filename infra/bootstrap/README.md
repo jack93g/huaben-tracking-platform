@@ -55,6 +55,14 @@ rm terraform.tfstate terraform.tfstate.backup bootstrap.tfplan
 - **`terraform init -migrate-state`** asks to copy the local state into the bucket. Answer `yes`.
 - **Delete the local state files** only once the migration has succeeded.
 
+Then create the environments' empty state files, once:
+
+```bash
+(cd ../envs/dev && terraform init) && (cd ../envs/prod && terraform init)
+```
+
+This is needed because the CI plan accounts are read-only (D-013). When `terraform init` finds no state, it tries to create it, and the plan accounts' write is refused, so PR plans fail until the state files exist. After that, plans only read the state.
+
 After the first run, the project-level Owner grants for `gcp-platform-admins@` are redundant, because the folder grant covers them. You can remove them by hand.
 
 ## Later runs
