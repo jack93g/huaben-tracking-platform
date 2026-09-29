@@ -68,6 +68,20 @@ gcloud auth application-default login
 gcloud auth application-default set-quota-project huaben-tracking-platform-admin
 ```
 
+## CI
+
+| Workflow | Runs on | What it does |
+|---|---|---|
+| `checks.yml` | every PR, and pushes to `main` | pre-commit hooks (formatting, `terraform validate`, tflint, gitleaks), plus a gitleaks scan of the whole history |
+| `terraform.yml` | PRs | `plan (dev)` and `plan (prod)` with the read-only plan accounts |
+| | merge to `main` | apply to dev, then to prod once you approve in the `prod` GitHub Environment |
+| | manual run on any branch | apply that branch to dev, to try it before merging |
+| `pr-review.yml` | PRs | advisory DeepSeek review via OpenRouter (needs the `OPENROUTER_API_KEY` repository secret) |
+
+- The required checks on `main` are `pre-commit`, `plan (dev)`, and `plan (prod)`.
+- **Workflow logs are public**, so Terraform code must never print secrets. Mark sensitive values `sensitive`.
+- Dependabot updates GitHub Actions, Terraform providers, and Python dependencies weekly. Tool versions in `mise.toml` are bumped by hand.
+
 ## Budgets
 
 Budgets are managed by hand, outside Terraform ([D-005](docs/decisions.md#d-005-budgets-are-managed-by-hand-outside-terraform)). The billing account is in EUR, and every budget alerts billing admins at 50%, 90%, and 100%.

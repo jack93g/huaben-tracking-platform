@@ -1,0 +1,57 @@
+name: PR review
+
+# Advisory DeepSeek review via OpenRouter (D-011). Never a required check, and
+# never given id-token: write, so it can't reach GCP.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Fork PRs don't get repo secrets or a write-scoped GITHUB_TOKEN, and
+    # Dependabot runs are denied Actions secrets, so skip both.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # Check out the base branch's SHA, never the PR's own code: the PR diff
+      # is fetched over the API. Otherwise a PR could edit the script to
+      # exfiltrate the secrets below.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Run DeepSeek review (via OpenRouter)
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # The PR that adds the script, or a repo without the secret, skips
+          # the review instead of failing.
+          if [ ! -f scripts/openrouter_pr_review.py ]; then
+            echo "::notice::Review script not on the base branch yet; skipping."
+            exit 0
+          fi
+          if [ -z "$OPENROUTER_API_KEY" ]; then
+            echo "::warning::OPENROUTER_API_KEY secret is not set; skipping review."
+            exit 0
+          fi
+          python scripts/openrouter_pr_review.py

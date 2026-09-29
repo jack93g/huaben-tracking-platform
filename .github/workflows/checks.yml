@@ -1,0 +1,41 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history, so gitleaks can scan every commit.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Installs the tool versions pinned in mise.toml and creates .venv.
+      - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Run pre-commit hooks
+        env:
+          # tflint downloads its Google ruleset from GitHub.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      # The pre-commit hook only sees staged changes; this scans all history.
+      - name: Scan git history for secrets
+        run: gitleaks git --redact --no-banner

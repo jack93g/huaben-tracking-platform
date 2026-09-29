@@ -166,6 +166,25 @@ This repository is public, so entries leave out individual account names, organi
   - The commit that reached prod is exactly the one that ran in dev first.
   - Pre-merge deployments to dev can leave dev ahead of `main` until the change is merged, or reverted by re-applying `main`.
 
+### D-016: CI workflow design
+
+*Accepted 2026-09-29 · TP-0*
+
+- **Decision:**
+  - **`checks.yml`** runs pre-commit and a full-history gitleaks scan.
+  - **`terraform.yml`** plans dev and prod on every pull request. A merge to `main` applies dev, then prod after approval. A manual run applies any branch to dev.
+  - **`pr-review.yml`** runs the advisory DeepSeek review (D-011).
+  - The required checks are `pre-commit`, `plan (dev)`, and `plan (prod)`, and branches must be up to date before merging.
+  - Tools come from `mise.toml` through `jdx/mise-action`, and every action is pinned to a SHA.
+- **GitHub Environments:**
+  - `dev` accepts any branch, with no reviewers.
+  - `prod` accepts only `main` and requires the repo owner's approval. Admins can't bypass it.
+- **Why:** The workflows put D-013 and D-015 into practice. The up-to-date rule means the plan you reviewed was made against the latest `main`.
+- **Consequences:**
+  - Workflow logs are public, so plans must not print secrets.
+  - Dependabot and fork PRs can't get an OIDC token, so their plan jobs are skipped. A skipped job still satisfies the required check, and Dependabot changes are planned again by the apply jobs after merging, where prod still needs approval.
+  - Dependabot doesn't cover `mise.toml`.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
