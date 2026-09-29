@@ -18,7 +18,8 @@ locals {
   # GitHub identifiers are matched by numeric ID, which can't be reused after a
   # rename or deletion, unlike owner/repo names.
   github = {
-    repository    = "jack93g/huaben-tracking-platform"
+    owner         = "jack93g"
+    repo          = "huaben-tracking-platform"
     repository_id = "1388971082"
     owner_id      = "76908040"
   }
