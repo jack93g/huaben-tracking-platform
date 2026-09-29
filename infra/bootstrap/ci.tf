@@ -39,8 +39,11 @@ locals {
     }
   ]...)
 
-  # GitHub's OIDC subject for a job that uses a GitHub Environment.
-  environment_subject = "repo:${local.github.repository}:environment"
+  # GitHub's OIDC subject for a job that uses a GitHub Environment. This repo
+  # uses GitHub's immutable subject format, which embeds the owner and
+  # repository IDs: repo:<owner>@<owner_id>/<repo>@<repo_id>:environment:<env>
+  # (see GET /repos/{repo}/actions/oidc/customization/sub).
+  environment_subject = "repo:${local.github.owner}@${local.github.owner_id}/${local.github.repo}@${local.github.repository_id}:environment"
 }
 
 resource "google_iam_workload_identity_pool" "github" {

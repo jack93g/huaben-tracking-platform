@@ -139,6 +139,7 @@ This repository is public, so entries leave out individual account names, organi
   - PR plans run with `-lock=false`, because the plan accounts can't write state locks.
   - The apply accounts start with the roles needed to manage APIs, IAM, and service accounts, and gain more as later tickets add resources.
   - Project IAM Admin means an apply account is effectively the admin of its own project, and only that project.
+  - The apply bindings match GitHub's **immutable subject** format, `repo:<owner>@<owner_id>/<repo>@<repo_id>:environment:<env>`, which this repo uses (check with `GET /repos/{repo}/actions/oidc/customization/sub`). The first version matched the older `repo:<owner>/<repo>:…` format, so no apply job could authenticate until it was fixed (2026-09-29).
 
 ### D-014: Development happens on a persistent `dev` branch
 
