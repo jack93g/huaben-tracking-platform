@@ -71,10 +71,12 @@ permissions than they need (especially id-token: write outside the Terraform \
 workflows), actions not pinned to a full commit SHA, untrusted code running \
 with secrets
 - Privilege escalation by CI identities (infra/bootstrap/ci.tf and any IAM \
-for service accounts): roles that let an account grant itself more access \
-(Project IAM Admin without a modifiedGrantsByRole condition, Owner, Editor, \
-Security Admin, Service Account Token Creator, Service Account Admin or User \
-beyond what's needed); any role added before a resource in the diff needs it
+for service accounts): roles this diff adds or broadens that let an account \
+grant itself more access (Project IAM Admin without a modifiedGrantsByRole \
+condition, Owner, Editor, Security Admin, Service Account Token Creator, \
+Service Account Admin or User beyond what's needed), or that are added \
+before any resource in the repo needs them. Only flag grants the diff adds \
+or broadens, not existing ones it leaves unchanged.
 - Secrets in Terraform state or plan output: secret values passed as regular \
 attributes instead of write-only arguments (e.g. secret_data_wo) or ephemeral \
 resources, outputs exposing secrets, nonsensitive() on sensitive values. PR \

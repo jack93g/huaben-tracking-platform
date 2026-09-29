@@ -106,5 +106,7 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 ## Decisions and tickets
 
 - Record decisions in `docs/decisions.md`: add an entry with an ID and move it from **Open** to **Accepted**. Entries are superseded, never deleted.
+  - A correction to a decision's details (e.g. its role list) is a dated *Amended* note in the same entry, saying what it was before and why it changed.
+  - A reversal of the decision itself gets a new entry that supersedes the old one, and the old one is marked *Superseded by D-NNN*.
 - `docs/epic-mvp.md` holds the full text of every ticket. When it changes, update the matching GitHub issue body to match.
 - The user treats this project as a way to learn. For decisions, lay out the options and trade-offs, give a recommendation, and let them choose. Don't pick silently, and don't treat an open decision as settled.
