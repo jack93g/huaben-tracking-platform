@@ -184,6 +184,10 @@ Recommendation: one container per environment.
 ## 3. Set up GTM Server on GCP
 
 - Create the server containers for dev and prod.
+- **Narrow the CI apply accounts** (D-013). They currently hold Service Account Admin and User project-wide. Service Account Admin includes `iam.serviceAccounts.setIamPolicy`, so an apply account could let itself act as any service account in its project. Once the sGTM runtime service accounts exist:
+  - grant Service Account User only on those specific accounts;
+  - replace Service Account Admin with narrower permissions, e.g. a custom role that can create service accounts but not set IAM on existing ones;
+  - add the Cloud Run, Secret Manager, and other roles this ticket needs, and no more.
 - Deploy the tagging and preview servers to Cloud Run (europe-west1) for each environment via Terraform, with the container config stored in Secret Manager.
 - Map the tracking domains and set up DNS and TLS. DNS records are managed with the official Cloudflare Terraform provider, using an API token scoped to DNS edits on the `huaben.app` zone and stored as a GitHub Environment secret. Records pointing at Google must be **DNS-only (not proxied)**, or Google can't issue the certificate.
 - Connect web GTM to the server container.
