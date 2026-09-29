@@ -80,7 +80,7 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
   - Commits are signed automatically with the user's SSH signing key (global git config: `gpg.format ssh`, `commit.gpgsign true`, and the author email is the GitHub no-reply address).
   - Never pass `--no-gpg-sign` or override `user.email`.
   - If signing fails, the key probably isn't loaded in the agent. Ask the user to run `ssh-add --apple-use-keychain ~/.ssh/id_ed25519_signing`.
-- All work happens on the persistent `dev` branch, and PRs go from `dev` into `main`. `dev` is kept after merging.
+- Work on a short-lived branch off `main`, named after the ticket (e.g. `tp-0/bootstrap`). It's squash-merged and then deleted (D-015). There is no persistent `dev` branch: environments are Terraform roots, not branches.
 - Don't push, open PRs, or merge without the user's go-ahead.
 
 **GitHub Actions is a security boundary**, because this repo's CI can change GCP.
@@ -92,7 +92,7 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 
 **Terraform:**
 - The bootstrap is only ever applied locally, by a person.
-- Environments are applied by CI: dev on merge to `main`, prod after approval in the `prod` GitHub Environment.
+- Environments are applied by CI: dev on merge to `main`, prod after approval in the `prod` GitHub Environment. A branch can also be deployed to dev manually, before merging, to try it out.
 - Commit `.terraform.lock.hcl`, and pin provider versions.
 - `*.tfvars` files are gitignored.
 

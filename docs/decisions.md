@@ -142,11 +142,29 @@ This repository is public, so entries leave out individual account names, organi
 
 ### D-014: Development happens on a persistent `dev` branch
 
-*Accepted 2026-09-27 · TP-0*
+*Superseded by D-015 on 2026-09-29 · TP-0*
 
 - **Decision:** All work is committed to `dev`, and PRs go from `dev` into `main`. `dev` isn't deleted after merging.
 - **Why:** It matches the app repo's workflow.
 - **Consequences:** `main` only allows squash merges, so after each merge `dev` has to be brought back in line with `main`, or the next PR would show old commits again. See the open decision below.
+
+### D-015: Short-lived branches (GitHub Flow); environments are promoted, not branched
+
+*Accepted 2026-09-29 · TP-0 · supersedes D-014*
+
+- **Decision:**
+  - Each change gets a short-lived branch off `main` (for example `tp-0/bootstrap`). It's squash-merged, and the branch is deleted afterwards.
+  - There's no long-lived `dev` branch. Branches don't map to environments.
+  - A merge to `main` applies to dev automatically. The same commit is then applied to prod after approval in the `prod` GitHub Environment.
+  - To try a change in dev before merging, the `dev` GitHub Environment also accepts manually triggered deployments from any branch. `prod` only deploys from `main`.
+- **Why:**
+  - D-014 was meant to tie a `dev` branch to the dev environment. In this setup environments are separate Terraform roots, and every change goes through both of them from one branch.
+  - Branch-per-environment is widely considered an anti-pattern for Terraform: branches drift apart, promotion becomes a merge that can conflict, and it's hard to tell what's actually running in prod.
+  - Squash-merging a long-lived branch needs constant re-syncing.
+  - Short-lived branches are the most common practice for infrastructure repos, and they fit the squash-only, linear-history ruleset (D-007).
+- **Consequences:**
+  - The commit that reached prod is exactly the one that ran in dev first.
+  - Pre-merge deployments to dev can leave dev ahead of `main` until the change is merged, or reverted by re-applying `main`.
 
 ## Open
 
@@ -154,7 +172,6 @@ These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
-| How `dev` stays in sync with `main` after a squash merge | TP-0 | Reset `dev` to `main` after each merge |
 | Web GTM across environments: one container with GTM Environments, or one per environment | TP-2 | One container with Environments |
 | Server GTM across environments | TP-3 | One container per environment |
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |

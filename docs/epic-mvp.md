@@ -100,7 +100,7 @@ Recommendation: one container per environment.
   - Pull requests from forks get no OIDC token, so they can't plan against GCP. That's intended.
 - ~~Protect `main`~~ Done 2026-09-27 (repository ruleset "Protect main"). Still to do in this ticket:
   - add the required status checks (pre-commit, plus the dev and prod plans) with "branches must be up to date" once the workflows have run;
-  - create the `dev` and `prod` GitHub Environments: deploy from `main` only, `prod` requires your approval, and the Cloudflare token is a `prod`-only secret;
+  - create the `dev` and `prod` GitHub Environments. `dev` deploys automatically from `main`, and also accepts manually triggered deployments from any branch so a change can be tried before merging (D-015). `prod` deploys only from `main`, requires your approval, and holds the Cloudflare token as a `prod`-only secret;
   - add `.github/dependabot.yml` for GitHub Actions, Terraform providers, and Python (uv), and pin every action to a commit SHA.
 
 **Decided:**
