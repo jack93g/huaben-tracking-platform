@@ -115,6 +115,57 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:** It's already built, tested, and cheap, and its security pattern is right: it checks out the base SHA and fetches the diff through the API, skips forks and Dependabot, and has minimal permissions. Switching to another reviewer later is a small change.
 - **Consequences:** The workflow is added in the TP-0 CI PR. It must never have `id-token: write`. The `OPENROUTER_API_KEY` repository secret has to be created in this repo.
 
+### D-012: The bootstrap's state lives in the bucket it creates
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** The bootstrap stores its state in `huaben-tracking-platform-tfstate` under `bootstrap/`, the same bucket as the environments. The first run applies with local state and then runs `terraform init -migrate-state`.
+- **Why:** A state file kept only on a laptop is easy to lose. In the bucket it's versioned, and it's in the same place as everything else.
+- **Consequences:** The first run is a documented two-step procedure (`infra/bootstrap/README.md`).
+
+### D-013: CI identities: separate plan and apply accounts, tied to GitHub Environments
+
+*Accepted 2026-09-27 · TP-0*
+
+- **Decision:** Each environment has two service accounts, both in the admin project.
+  - **`tf-plan-<env>`** is read-only (Viewer and Security Reviewer). Any workflow run in this repository can use it, so pull requests can run plans.
+  - **`tf-apply-<env>`** makes changes. Only jobs running in the matching GitHub Environment can use it; `prod` requires approval.
+  - The Workload Identity provider only accepts tokens from this repository, checked by numeric repository ID and owner ID rather than by name.
+  - On the state bucket, IAM conditions limit each account to its own `envs/<env>/` prefix: read-only for plan, read-write for apply.
+- **Why:**
+  - PR plans need credentials, but anything a PR can run shouldn't be able to change infrastructure.
+  - Numeric IDs can't be taken over through a repository rename.
+- **Consequences:**
+  - PR plans run with `-lock=false`, because the plan accounts can't write state locks.
+  - The apply accounts start with the roles needed to manage APIs, IAM, and service accounts, and gain more as later tickets add resources.
+  - Project IAM Admin means an apply account is effectively the admin of its own project, and only that project.
+
+### D-014: Development happens on a persistent `dev` branch
+
+*Superseded by D-015 on 2026-09-29 · TP-0*
+
+- **Decision:** All work is committed to `dev`, and PRs go from `dev` into `main`. `dev` isn't deleted after merging.
+- **Why:** It matches the app repo's workflow.
+- **Consequences:** `main` only allows squash merges, so after each merge `dev` has to be brought back in line with `main`, or the next PR would show old commits again. See the open decision below.
+
+### D-015: Short-lived branches (GitHub Flow); environments are promoted, not branched
+
+*Accepted 2026-09-29 · TP-0 · supersedes D-014*
+
+- **Decision:**
+  - Each change gets a short-lived branch off `main` (for example `tp-0/bootstrap`). It's squash-merged, and the branch is deleted afterwards.
+  - There's no long-lived `dev` branch. Branches don't map to environments.
+  - A merge to `main` applies to dev automatically. The same commit is then applied to prod after approval in the `prod` GitHub Environment.
+  - To try a change in dev before merging, the `dev` GitHub Environment also accepts manually triggered deployments from any branch. `prod` only deploys from `main`.
+- **Why:**
+  - D-014 was meant to tie a `dev` branch to the dev environment. In this setup environments are separate Terraform roots, and every change goes through both of them from one branch.
+  - Branch-per-environment is widely considered an anti-pattern for Terraform: branches drift apart, promotion becomes a merge that can conflict, and it's hard to tell what's actually running in prod.
+  - Squash-merging a long-lived branch needs constant re-syncing.
+  - Short-lived branches are the most common practice for infrastructure repos, and they fit the squash-only, linear-history ruleset (D-007).
+- **Consequences:**
+  - The commit that reached prod is exactly the one that ran in dev first.
+  - Pre-merge deployments to dev can leave dev ahead of `main` until the change is merged, or reverted by re-applying `main`.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
