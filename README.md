@@ -74,7 +74,7 @@ gcloud auth application-default set-quota-project huaben-tracking-platform-admin
 |---|---|---|
 | `checks.yml` | every PR, and pushes to `main` | pre-commit hooks (formatting, `terraform validate`, tflint, gitleaks), plus a gitleaks scan of the whole history |
 | `terraform.yml` | PRs | `plan (dev)` and `plan (prod)` with the read-only plan accounts |
-| | merge to `main` | apply to dev, then to prod once you approve in the `prod` GitHub Environment |
+| | merge to `main` | apply to dev, plan prod (shown in the run's summary), then apply to prod once you approve in the `prod` GitHub Environment |
 | | manual run on any branch | apply that branch to dev, to try it before merging |
 | `pr-review.yml` | PRs | advisory DeepSeek review via OpenRouter (needs the `OPENROUTER_API_KEY` repository secret) |
 
