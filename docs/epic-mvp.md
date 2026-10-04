@@ -30,13 +30,9 @@ Everything is built twice: once for **dev** and once for **prod**. Each environm
 | BigQuery | `analytics` dataset in the dev project | `analytics` dataset in the prod project |
 | dbt | CI and ad-hoc runs | scheduled runs |
 
-GTM changes are promoted the same way each time: build and verify in dev, export the container JSON, import it into the prod container (merge), then publish.
+The web container is promoted through GTM Environments (D-028): publish a version to the `dev` environment, verify it, then publish the same version to Live. A server container split per environment is promoted by export and import: build and verify in dev, export the container JSON, import it into the prod container (merge), then publish.
 
-**Open: how web GTM is split across environments.**
-- One web container using GTM Environments. The local dev server loads the dev environment snippet, GitHub Pages loads Live, and a lookup table on hostname (`localhost` → dev) picks the sGTM URL.
-- One web container per environment. This gives more isolation but means promoting by import.
-
-Recommendation: one container with Environments.
+**Web GTM: one container with GTM Environments (D-028).** The local dev server loads the `dev` environment's snippet, GitHub Pages loads Live, and lookup variables on the hostname (`localhost` → dev) pick the sGTM URL and the measurement ID.
 
 **Open: how server GTM is split across environments.**
 - One server container per environment. This isolates them cleanly, and each container holds its own BigQuery project and dataset.
@@ -159,22 +155,35 @@ Recommendation: one container per environment.
 
 ## 2. Set up GTM Web
 
-- Create and configure the web container per the environment decision, and add it to the frontend.
+- Create and configure the web container, with a `dev` GTM Environment (D-028), and add it to the frontend. The build chooses the snippet: the `dev` environment's on the local dev server, Live on GitHub Pages.
+  - The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables. Add them to the app's `deploy-frontend.yml`.
 - Implement the dataLayer interface and generate `anonymous_id` and `session_id` per the contract (D-020). Only set identifiers when the consent decision allows it.
+  - Generate them in the frontend's own code, not in a GTM tag, and push them to the dataLayer. The API calls need them too, outside GTM.
+  - On logout, replace `anonymous_id` and start a new session (D-020).
+  - When consent is withdrawn, delete both cookies and stop sending the identity headers (D-021).
+  - `schema_version` is a constant in the frontend's tracking code, set to the contract version it was built against and changed by hand when that changes.
 - **App change:** `/auth/me` returns only the username today. Make it return the user's ID too, so the frontend can set `user_id`.
+- **App change:** send the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call (D-020).
+  - The API's CORS allowed headers are only `Content-Type` and `X-API-Key` today, so a request carrying the new headers fails its preflight. Add the three headers to the allowed list and deploy the API **before** the frontend starts sending them.
+  - The API ignores the headers until TP-5, which reads and stores them.
 - The frontend is a Next.js single-page app, so fire `page_view` on every client-side route change, not only on page load.
-- Implement initial browser events, starting with `page_view`.
-- Configure the consent state.
-- Strip query strings from `page_location` and `referrer`, or keep only allowlisted parameters, so emails and tokens in URLs aren't sent on.
+  - The first `page_view` after a load waits for the session check (`/auth/me`), so it carries `user_id` when someone is logged in. On the login screen it's sent without one.
+- Implement initial browser events, starting with `page_view`. They're sent with the GA4 tag, in basic consent mode, with the contract's own fields as event parameters (D-027).
+- Configure the consent state with Cookiebot (D-029).
+  - Load it with Cookiebot's tag template in the web container, on the Consent Initialization trigger. Review the template's permissions before adding it.
+  - Add `localhost` and `localhost:3000` as domain aliases, and first confirm that the free plan allows them. If it doesn't, fall back to vanilla-cookieconsent.
+  - Check that the banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
+  - Read the consent state in one small module of the frontend, which the identity cookies and the `X-Tracking-Consent` header depend on.
+  - The module follows Cookiebot's events. Cookiebot's script loads after the app starts, so a single read at startup would see no consent yet. Verify both orders: a returning visitor who already accepted gets identifiers and a `page_view` on first load, and a new visitor gets them as soon as they accept, without a reload.
+  - Set each tag's consent settings in GTM.
+- Strip query strings from `page_location` and `referrer`, keeping only allowlisted parameters, so emails and tokens in URLs aren't sent on. The allowlist is `id` on `/story` (story pages are `/story?id=…`, and without it they'd all look the same). Everything else, such as `fresh`, is dropped.
 - Verify in GTM Preview.
 
-**Open:**
-- Which consent management platform? Consent Mode v2 is adopted (D-021). Recommendation: Cookiebot's free plan (one domain, up to 50 subpages), the most common setup. Alternatives: CookieYes, or the self-hosted, open-source vanilla-cookieconsent. Check first that the banner works on `localhost`.
-- How browser events reach sGTM: the GA4 client, or the same custom client as the backend (D-024).
+**Note:** The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3 (D-027).
 
 **Note:** Test in dev on the local dev server (`localhost`). GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
 
-**Deliverable:** In dev, `page_view` appears in GTM Preview with every common field from the contract. With consent denied, the behaviour matches the Phase 1 decision.
+**Deliverable:** In dev, `page_view` appears in GTM Preview with every common field the frontend sets (all but `server_timestamp`) and its properties, ready for the GA4 tag. With consent denied, the behaviour matches the Phase 1 decision.
 
 ---
 
@@ -220,6 +229,7 @@ Recommendation: one container per environment.
 - Partition daily on the column chosen in Phase 1, cluster by `event_name`, and set partition expiration per the retention policy.
 - Give the sGTM service account write access to the `analytics` dataset only.
 - Build the sGTM → BigQuery tag. sGTM has no built-in BigQuery tag, so this is a custom template using the `BigQuery.insert` sandbox API. Map events to the schema.
+- Map browser events to the contract's row first (D-027). They arrive through the GA4 client in GA4's shape, while backend events arrive already in the contract's shape. On the browser path, always set `source` to `frontend` and refuse the names of backend events, because that path takes no secret.
 - On insert failure, the tag calls `logToConsole` with the `event_id` and the error, so that Phase 8 alerts have something to fire on.
 - Don't write the IP address or other unnecessary PII.
 - Validate the schema and data types, and test malformed events against the defined behaviour.
@@ -231,6 +241,12 @@ Recommendation: one container per environment.
   - validate in sGTM and write rejects, with their raw payload and the reason, to an `events_rejected` table
 
   Recommendation: the rejects table, so nothing is lost silently.
+- **Guarding the browser path (D-027).** The GA4 client's path takes no secret, so anyone can post forged `page_view` events, made-up identifiers, or bulk spam. Options:
+  - validate each event against the contract (known event name, UUID identifiers, property types) and limit string lengths and request size
+  - also check the request's `Origin` against the site's hostnames, which stops casual misuse but is trivially forged outside a browser
+  - rate limit, which Cloud Run can't do by itself: it needs Cloud Armor, and so the load balancer (TP-3)
+
+  Recommendation: validation and size limits, with the `Origin` check, and accept the rest for the MVP. Bulk spam is bounded by the Cloud Run instance limit and shows up in the budget alerts.
 
 **Note:** Writes from sGTM to BigQuery are best-effort. A failed insert is logged but not retried. The durable upgrade is Pub/Sub with a BigQuery subscription (after the MVP).
 
@@ -242,7 +258,7 @@ Recommendation: one container per environment.
 
 - **sGTM side:** implement the custom client (D-024). It checks the shared-secret header against the SHA-256 hash stored in the container.
 - Define a small tracking module in FastAPI, using the Pydantic models generated from the contract.
-- Read `anonymous_id`, `session_id`, and consent state from the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` request headers (D-020). Drop values that aren't UUIDs, and add the three headers to the API's CORS allowed headers.
+- Read `anonymous_id`, `session_id`, and consent state from the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` request headers (D-020). Drop values that aren't UUIDs. The frontend already sends the headers, and CORS already allows them (TP-2).
 - **App change:** `story_generation_requests` has no `user_id` today. Add it, and record the requesting user when a generation is created.
 - Generate authoritative business events: `story_generated` for the MVP, then `login` and `quiz_submitted`, which the contract already defines. The app has no sign-up or "add vocabulary" action today; `sign_up` is added if the app gains one (D-017).
 - Add `event_id` and `event_timestamp` once, when the outbox row is written. For `story_generated`, `event_timestamp` is the request's `completed_at` (D-026). Retries never change either. `server_timestamp` is set by sGTM.

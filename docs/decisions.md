@@ -346,21 +346,85 @@ This repository is public, so entries leave out individual account names, organi
   - The gap between the two timestamps is the delivery delay.
   - The generator refuses an event without an `event_time`.
 
+### D-027: Browser events reach sGTM through the GA4 tag and client, in basic consent mode
+
+*Accepted 2026-10-04 · TP-2*
+
+- **Decision:**
+  - Web GTM sends browser events with the GA4 tag, pointed at the tracking domain. In sGTM the built-in GA4 client claims them.
+  - The contract's own fields (`event_id`, `schema_version`, `event_timestamp`, `anonymous_id`, `session_id`) travel as event parameters. `user_id` uses GA4's own field.
+  - A mapping step in sGTM turns the GA4-shaped event into the contract's row before it's stored. On this path it always sets `source` to `frontend`, and it refuses the names of backend events.
+  - The custom client (D-024) stays backend-only and keeps requiring its secret.
+  - Consent Mode runs in **basic mode**: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied (D-021).
+- **Why:**
+  - It's the standard way a browser reaches sGTM, and the contract's browser events already use GA4's names (D-017). Forwarding to GA4 after the MVP needs no second mapping.
+  - Google's tag handles batching, sending on page unload, and Consent Mode. GTM Preview shows the event on both sides.
+  - Sending the contract's JSON to the custom client would give one shape and one client. But a browser can't hold the secret, so the client would need a second path without one, plus CORS handling, and web GTM would be reduced to a single Custom HTML tag with hand-written transport code.
+  - Advanced mode's cookieless pings only pay off as modelling inside GA4 and Google Ads. The MVP forwards nothing to either, the app's traffic is far below GA4's modelling thresholds, and D-021 already rules the pings out.
+- **Consequences:**
+  - Two shapes arrive in sGTM: GA4's from the browser, and the contract's from the backend. The mapping, and its validation against the contract, is TP-4's work.
+  - The tag needs a GA4 measurement ID, so a GA4 property exists even though nothing is forwarded to it in the MVP. A measurement ID isn't a secret.
+  - Until the tracking domain exists (TP-3), a live tag would send straight to Google. TP-2 verifies the dataLayer and variables in Preview; the tag goes live only once it points at sGTM.
+  - Google's tag sets its own `_ga` cookies once consent is granted. The identity is still D-020's: `client_id` isn't stored.
+  - The GA4 client's path takes no secret, like any browser collection endpoint, so anyone can post to it. This is why the mapping fixes `source` and refuses backend event names.
+  - That only stops a browser event passing as a backend one. It doesn't stop forged frontend events, made-up identifiers, or bulk spam. How far to guard against those is TP-4's decision.
+  - Page views from users who decline are missing from the warehouse. Backend events aren't affected (D-021).
+  - Revisit basic mode when GA4 or Google Ads forwarding is added. Changing it is a reversal, so it takes a new entry that supersedes both this one and D-021 and restates what's kept from each.
+
+### D-028: One web GTM container, with GTM Environments
+
+*Accepted 2026-10-04 · TP-2*
+
+- **Decision:**
+  - There's one web container. The local dev server loads the snippet of a `dev` GTM Environment, and GitHub Pages loads Live.
+  - A version is published to `dev` first, verified, and then the same version is published to Live.
+  - Values that differ by environment, such as the sGTM URL and the measurement ID, come from lookup variables on the hostname (`localhost` → dev).
+- **Why:**
+  - The version that was tested is the version that's promoted. A container per environment would be promoted by export and import, which is manual and can overwrite prod's values if the merge options are wrong.
+  - The web container is small, and dev is only ever `localhost`, so full isolation buys little. One container also means one version history and one export in `gtm/`.
+  - Using Preview mode alone, without Environments, would leave no step between a draft and Live.
+- **Consequences:**
+  - Dev and prod share a container, so a version can be published to Live by mistake. The export job (D-010) turns every Live change into a PR diff.
+  - The frontend build chooses the snippet: the environment's snippet carries `gtm_auth` and `gtm_preview` parameters, which aren't secrets.
+  - Web and server GTM are promoted differently if the server containers are split per environment (TP-3's decision).
+
+### D-029: Cookiebot is the consent management platform, loaded through GTM
+
+*Accepted 2026-10-04 · TP-2*
+
+- **Decision:**
+  - The consent banner is Cookiebot, on its free plan.
+  - It's loaded by Cookiebot's tag template in the web container, on the Consent Initialization trigger, so it runs before every other tag.
+  - The template sets the Consent Mode v2 defaults and updates (D-021). Every other tag is gated by its consent settings in GTM.
+  - The frontend reads the consent state from Cookiebot, behind one small module. That module decides whether the identity cookies exist and what `X-Tracking-Consent` says (D-020).
+  - The module follows Cookiebot's events, not a single read at startup. Until Cookiebot has reported, consent is unknown and counts as denied. When it reports or changes to granted, the module creates the identifiers, starts the headers, and sends the `page_view` for the page being shown. When it changes to denied, it deletes the cookies and stops the headers.
+  - `localhost` and `localhost:3000` are added as domain aliases, so the banner runs on the local dev server.
+- **Why:**
+  - Cookiebot through its GTM template is the setup most likely to be met in an e-commerce shop, which is what this project is practice for. Consent is configured in one place, GTM, and a change to it is a publish, promoted through the same Environments as the tags (D-028).
+  - Cookiebot sets Consent Mode by itself and keeps a log of consents.
+  - The self-hosted vanilla-cookieconsent is the better technical fit for this app: its code could import it directly, nothing would leave `huaben.app`, and it has no limits. It was passed over because it's less common in that work and keeps no consent log. CookieYes offers much the same as Cookiebot with less presence.
+  - Loading the script in the frontend's root layout, as Cookiebot's guide for Next.js describes, would move the consent setup out of GTM and into the app's code.
+- **Consequences:**
+  - Cookiebot's guide for Next.js says the banner can flash and disappear when its script loads after the page hydrates, which a script loaded by GTM does. TP-2 tests for this. If it happens, the script moves to the root layout, recorded as an amendment here.
+  - The template comes from GTM's Community Template Gallery, so its permissions are reviewed before it's added.
+  - A third party's script loads on every page, and Cookiebot sets its own cookie. The privacy notice must name it.
+  - If the script is blocked, e.g. by an ad blocker, there's no banner and consent stays unknown, which counts as denied (D-021).
+  - The free plan covers one domain and 50 subpages. Its cookie scanner only sees the login page, so the cookie declaration needs checking by hand.
+  - TP-2 confirms that the free plan allows the `localhost` alias. If it doesn't, the fallback is vanilla-cookieconsent, and only the consent module and the way the banner loads would change.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
-| Web GTM across environments: one container with GTM Environments, or one per environment | TP-2 | One container with Environments |
 | Server GTM across environments | TP-3 | One container per environment |
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
 | Minimum Cloud Run instances | TP-3 | 0 in both environments |
 | Tracking DNS records | TP-3 | Cloudflare Terraform provider, DNS-only records |
-| Consent management platform (Consent Mode v2 is adopted, D-021) | TP-2 | Cookiebot's free plan; CookieYes or the self-hosted vanilla-cookieconsent are the alternatives |
 | Behaviour for malformed events | TP-4 | An `events_rejected` table |
+| Guarding the browser path against forged events and spam (D-027) | TP-4 | Validate against the contract and limit sizes; accept the rest for the MVP |
 | Backend delivery | TP-5 | Postgres outbox, sent by the existing worker |
 | Which backend events are in the MVP | TP-5 | Only `story_generated` is required; `login` and `quiz_submitted` are already in the contract (D-017) |
-| How browser events reach sGTM: the GA4 client or the custom client | TP-2 | Open |
 | Cleanup of per-PR dbt datasets | TP-6 | Open |
 | Whether TP-7 and TP-8 are in the MVP | Epic | TP-7 yes; TP-8 only the failed-insert and freshness alerts |
