@@ -131,33 +131,27 @@ Recommendation: one container per environment.
   - the Pydantic models for the backend
 
   Add a CI check that fails if the generated files are out of date.
-- Define the common fields: `event_name`, `event_id`, `schema_version`, `client_timestamp`, `server_timestamp`, `user_id`, `anonymous_id`, `session_id`, `source` (frontend or backend), and consent state.
-- Define what the timestamps mean. `client_timestamp` is when the event happened at its source, whether that's the browser or the backend. `server_timestamp` is set by sGTM when it receives the event, for both sources.
+- Define the common fields: `event_name`, `event_id`, `schema_version`, `event_timestamp`, `server_timestamp`, `user_id`, `anonymous_id`, `session_id`, `source` (frontend or backend), and consent state.
+- Define what the timestamps mean (D-026). `event_timestamp` is the business time, when the thing the event describes happened, and each event defines which moment that is. For `story_generated` it's when the generation completed. `server_timestamp` is set by sGTM when it receives the event, for both sources.
 - Define event-specific properties.
 - Single source per event: each event comes from either the frontend or the backend, never both.
 - Identity propagation: decide how `anonymous_id` and `session_id` reach the API (for example a request header set by the frontend) and who generates `session_id`.
 - Define the BigQuery event schema, kept in the repo (generated from the contract).
 
-**Decisions for this phase:**
-- **Property storage.** Recommendation: typed common fields plus a `properties JSON` column, with dbt extracting typed values. That way adding an event doesn't need a schema migration.
-- **Partition column.** Recommendation: `server_timestamp`. Client clocks drift and late events arrive, and partition expiration should act on a time you control.
-- **Identity lifecycle.**
-  - Does `anonymous_id` rotate on logout?
-  - How are events stitched when one `user_id` has many `anonymous_id`s (several devices)?
-  - How are they stitched when one `anonymous_id` has many `user_id`s (a shared device)?
-  - How far back is `user_id` backfilled?
-
-  These rules define the identity model in Phase 6.
-- **Consent.**
-  - What frontend events require.
-  - How consent applies to backend events.
-  - **What happens when consent is denied.** Under ePrivacy, storing `anonymous_id` probably needs consent. If there's no `anonymous_id`, backend events can't be stitched. Get a legal view on whether any backend analytics event counts as "necessary".
-- **Retention.** Set periods for raw events, derived dbt tables, and logs. Derived tables must not outlive the raw data they came from. Phase 4 implements this.
-- **Late-event tolerance.** How late an event can arrive and still be deduplicated. This sets the dbt incremental lookback window.
-- **Backend → sGTM design (Open).** sGTM only processes requests that a *client* claims. Decide:
-  - **Request format:** a custom client template, or the GA4 client with Measurement Protocol-style payloads. A custom client lets the payload match the contract exactly. The GA4 client is off the shelf but ties the payload to GA4's format.
-  - **Authentication:** the endpoint is public, so backend ("authoritative") events need a shared-secret header that the client checks, with the secret in Secret Manager.
-  - **Delivery guarantee:** see Phase 5.
+**Decided (2026-10-04).** The specification is [tracking-spec.md](tracking-spec.md), and the contract is `contract/events.yaml`.
+- **Naming and events** (D-017): GA4's name when the event really is that GA4 event, otherwise a custom `object_action` event. The MVP's events are `page_view` and `story_generated`. `login` and `quiz_submitted` are also in the contract.
+- **Contract format** (D-018): a YAML file with a Python generator, one semantic version, and the Pydantic models installed by the app from a git tag.
+- **Property storage and partition column** (D-019): typed common fields plus a `properties` JSON column, partitioned on `server_timestamp`.
+- **Identity** (D-020):
+  - `user_id` is the app's user ID as a string.
+  - The frontend generates `anonymous_id` and `session_id`, keeps them in first-party cookies, and sends them to the API in request headers.
+  - Logout replaces `anonymous_id`.
+  - dbt backfills `user_id` onto earlier anonymous events on the same `anonymous_id`, within 30 days.
+- **Consent** (D-021, not legally reviewed): with consent denied the frontend sends nothing and sets no identifiers. Backend events are still sent, with `user_id` but no device identifiers.
+- **Retention** (D-022): 14 months for raw events and event-level models, 30 days for rejected events and logs, 7 days for sent outbox rows.
+- **Timestamps** (D-026): `event_timestamp` is the business time, defined per event and never changed by retries. `server_timestamp` is when sGTM received it.
+- **Late-event tolerance** (D-023): a 3-day dbt lookback, with the outbox giving up after 48 hours.
+- **Backend → sGTM** (D-024): a custom client, one event per request, with a shared-secret header. The server container stores only the secret's SHA-256 hash, because the container is exported to this public repo.
 
 **Deliverable:** A versioned tracking specification in `docs/`, the contract file, and the generated schema, with every decision above recorded in `docs/decisions.md`.
 
@@ -166,14 +160,17 @@ Recommendation: one container per environment.
 ## 2. Set up GTM Web
 
 - Create and configure the web container per the environment decision, and add it to the frontend.
-- Implement the dataLayer interface and generate `anonymous_id` and `session_id` per the contract. Only set identifiers when the consent decision allows it.
+- Implement the dataLayer interface and generate `anonymous_id` and `session_id` per the contract (D-020). Only set identifiers when the consent decision allows it.
+- **App change:** `/auth/me` returns only the username today. Make it return the user's ID too, so the frontend can set `user_id`.
+- The frontend is a Next.js single-page app, so fire `page_view` on every client-side route change, not only on page load.
 - Implement initial browser events, starting with `page_view`.
 - Configure the consent state.
 - Strip query strings from `page_location` and `referrer`, or keep only allowlisted parameters, so emails and tokens in URLs aren't sent on.
 - Verify in GTM Preview.
 
 **Open:**
-- Which consent management platform? Adopt Consent Mode v2 now: GA4 and Meta after the MVP both need it, and retrofitting it later costs more.
+- Which consent management platform? Consent Mode v2 is adopted (D-021). Recommendation: Cookiebot's free plan (one domain, up to 50 subpages), the most common setup. Alternatives: CookieYes, or the self-hosted, open-source vanilla-cookieconsent. Check first that the banner works on `localhost`.
+- How browser events reach sGTM: the GA4 client, or the same custom client as the backend (D-024).
 
 **Note:** Test in dev on the local dev server (`localhost`). GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
 
@@ -243,11 +240,12 @@ Recommendation: one container per environment.
 
 ## 5. Implement backend tracking
 
-- **sGTM side:** implement the backend client chosen in Phase 1, including the shared-secret check.
+- **sGTM side:** implement the custom client (D-024). It checks the shared-secret header against the SHA-256 hash stored in the container.
 - Define a small tracking module in FastAPI, using the Pydantic models generated from the contract.
-- Read `anonymous_id`, `session_id`, and consent state from incoming requests. If they travel as custom headers, add those headers to the API's CORS allowed headers.
-- Generate authoritative business events: `story_generated` for the MVP, then `sign_up`, `login`, and `vocabulary_added`.
-- Add `event_id` and `client_timestamp`. `server_timestamp` is set by sGTM.
+- Read `anonymous_id`, `session_id`, and consent state from the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` request headers (D-020). Drop values that aren't UUIDs, and add the three headers to the API's CORS allowed headers.
+- **App change:** `story_generation_requests` has no `user_id` today. Add it, and record the requesting user when a generation is created.
+- Generate authoritative business events: `story_generated` for the MVP, then `login` and `quiz_submitted`, which the contract already defines. The app has no sign-up or "add vocabulary" action today; `sign_up` is added if the app gains one (D-017).
+- Add `event_id` and `event_timestamp` once, when the outbox row is written. For `story_generated`, `event_timestamp` is the request's `completed_at` (D-026). Retries never change either. `server_timestamp` is set by sGTM.
 - Send events without blocking the user's request. Retries reuse the same `event_id` so they stay idempotent.
 
 **Delivery design (Open; document the result):**
@@ -259,18 +257,18 @@ Recommendation: one container per environment.
   1. **In-process async queue.** Retry with backoff and flush on shutdown via FastAPI's lifespan handler. Cheap, at-most-once, and loses events on a crash or redeploy.
   2. **Transactional outbox in Postgres, sent by the existing worker.**
      - In the same database transaction as the business write, insert a row into a `tracking_outbox` table: `event_id` (primary key), payload, `created_at`, `attempts`, `next_attempt_at`, `sent_at`, `last_error`.
-     - The existing durable worker claims unsent rows (`FOR UPDATE SKIP LOCKED`), POSTs them to sGTM with the shared-secret header, and marks them sent. Failures back off and retry with the same `event_id`. After a maximum number of attempts, a row is marked dead.
+     - The existing durable worker claims unsent rows (`FOR UPDATE SKIP LOCKED`), POSTs them to sGTM with the shared-secret header, and marks them sent. Failures back off and retry with the same `event_id`. After 48 hours of retries, a row is marked dead (D-023).
      - Events survive crashes and redeploys, and are never recorded for a business write that rolled back.
      - Delivery is at-least-once, and dbt dedup removes the duplicates.
      - It reuses Postgres and the worker, with no new infrastructure or GCP credentials. The user's request only pays for a local insert.
   3. **Cloud Tasks or Pub/Sub.** Durable, but rejected because they need a service account key on the VM.
 - **Recommendation:** the outbox.
-- **Identity context.** `story_generated` is produced by the worker, which has no HTTP request to read headers from. Capture `anonymous_id`, `session_id`, and consent when the generation request is created, store them with it, and copy them into the outbox payload.
-- **Housekeeping.** Delete sent rows after a short period, per the retention policy.
-- **Secret.** The sGTM shared secret reaches the VM the same way as the app's other runtime secrets (the M5 deploy process), never through the repo.
+- **Identity context.** `story_generated` is produced by the worker, which has no HTTP request to read headers from. Capture `user_id`, `anonymous_id`, `session_id`, and consent when the generation request is created, store them with it, and copy them into the outbox payload.
+- **Housekeeping.** Delete sent rows after 7 days (D-022).
+- **Secret.** The sGTM shared secret reaches the VM the same way as the app's other runtime secrets (the M5 deploy process), never through the repo. It's stored nowhere else: sGTM holds only its hash (D-024).
 
 **Open:**
-- Are `sign_up`, `login`, and `vocabulary_added` part of the MVP? Only `story_generated` is needed for the MVP boundary.
+- Are `login` and `quiz_submitted` part of the MVP? Only `story_generated` is needed for the MVP boundary.
 
 **Deliverable:** A `story_generated` sent from the dev API lands in dev `analytics.events` with the same `anonymous_id` as the `page_view` from the same browser. With sGTM made unreachable, events wait in the outbox and are delivered, without duplicates in `fct_events`, once it's back.
 
@@ -278,9 +276,9 @@ Recommendation: one container per environment.
 
 ## 6. dbt modeling
 
-- Set up a dbt project against BigQuery, with `dev` and `prod` targets.
-- Build `stg_events`: incremental, typed, cleaned, and deduplicated on `event_id`, with a lookback window equal to the Phase 1 late-event tolerance.
-- Build an identity-map model (`anonymous_id` → `user_id`) that implements the Phase 1 identity rules.
+- Set up a dbt Core project against BigQuery (D-025), with `dev` and `prod` targets. The source definition and its tests are generated from the contract into `dbt/models/staging/_contract__sources.yml`.
+- Build `stg_events`: incremental, typed, cleaned, and deduplicated on `event_id`, with a 3-day lookback window (D-023).
+- Build an identity-map model (`anonymous_id` → `user_id`) that implements the identity rules in D-020.
 - Build `fct_events`: frontend and backend events joined on identity, with `user_id` backfilled per the identity map.
 - Add tests, generated from the contract where possible:
   - unique and not-null `event_id`

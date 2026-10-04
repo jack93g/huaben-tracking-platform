@@ -1,0 +1,94 @@
+[
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "UUID v4 generated once where the event happens. Retries reuse it, so it is the deduplication key."
+  },
+  {
+    "name": "event_name",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The event's name, one of the events in the contract."
+  },
+  {
+    "name": "schema_version",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Version of the tracking contract the sender was built against."
+  },
+  {
+    "name": "source",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Where the event was produced. Each event has exactly one source."
+  },
+  {
+    "name": "event_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When the event happened, in UTC, as defined by the event's event_time. Set once; retries and delayed delivery never change it."
+  },
+  {
+    "name": "server_timestamp",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When sGTM received the event, in UTC. The table is partitioned on it."
+  },
+  {
+    "name": "user_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The app's user ID as a string. Null when nobody is logged in."
+  },
+  {
+    "name": "anonymous_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "UUID v4 identifying the browser. Null without analytics consent."
+  },
+  {
+    "name": "session_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "UUID v4 identifying the browser session. Null without analytics consent."
+  },
+  {
+    "name": "consent",
+    "type": "RECORD",
+    "mode": "REQUIRED",
+    "description": "Consent Mode v2 signals at the time of the event.",
+    "fields": [
+      {
+        "name": "analytics_storage",
+        "type": "STRING",
+        "mode": "REQUIRED",
+        "description": "Consent for analytics identifiers. Unknown counts as denied."
+      },
+      {
+        "name": "ad_storage",
+        "type": "STRING",
+        "mode": "NULLABLE",
+        "description": "Consent for advertising identifiers. Null when not collected."
+      },
+      {
+        "name": "ad_user_data",
+        "type": "STRING",
+        "mode": "NULLABLE",
+        "description": "Consent to send user data to advertising platforms. Null when not collected."
+      },
+      {
+        "name": "ad_personalization",
+        "type": "STRING",
+        "mode": "NULLABLE",
+        "description": "Consent for personalised advertising. Null when not collected."
+      }
+    ]
+  },
+  {
+    "name": "properties",
+    "type": "JSON",
+    "mode": "REQUIRED",
+    "description": "Event-specific properties, as defined per event in the contract. An empty object when there are none."
+  }
+]

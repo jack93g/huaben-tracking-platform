@@ -29,3 +29,18 @@ repos:
         entry: gitleaks git --pre-commit --staged --redact --no-banner
         language: system
         pass_filenames: false
+
+      # Fails when the files generated from contract/events.yaml are out of date (D-018).
+      - id: contract-generated
+        name: contract (generated files up to date)
+        entry: uv run python scripts/generate_contract.py --check
+        language: system
+        pass_filenames: false
+        files: ^(contract/|scripts/generate_contract\.py|dbt/models/staging/_contract__sources\.yml)
+
+      - id: contract-tests
+        name: contract (tests)
+        entry: uv run pytest -q
+        language: system
+        pass_filenames: false
+        files: ^(contract/|scripts/generate_contract\.py|tests/)
