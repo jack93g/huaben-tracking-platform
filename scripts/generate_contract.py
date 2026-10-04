@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import keyword
 import re
 import sys
 from pathlib import Path
@@ -113,6 +114,9 @@ def validate_field(field: dict[str, Any], *, where: str) -> None:
     name = field.get("name", "")
     if not FIELD_NAME.match(str(name)):
         raise ContractError(f"{where}: field name {name!r} must be snake_case")
+    # These would produce a models.py that does not parse, or clash with Pydantic.
+    if keyword.iskeyword(name) or name.startswith("model_"):
+        raise ContractError(f"{where}: {name!r} can't be used as a field name in Python")
     if field.get("type") not in BIGQUERY_TYPES:
         raise ContractError(f"{where}: {name} has unknown type {field.get('type')!r}")
     if not isinstance(field.get("required"), bool):
