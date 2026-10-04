@@ -43,4 +43,4 @@ repos:
         entry: uv run pytest -q
         language: system
         pass_filenames: false
-        files: ^(contract/|scripts/generate_contract\.py|tests/)
+        files: ^(contract/|scripts/generate_contract\.py|tests/|pyproject\.toml|uv\.lock)

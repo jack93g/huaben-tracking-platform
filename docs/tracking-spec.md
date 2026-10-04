@@ -124,6 +124,7 @@ X-Tracking-Secret: <secret>
 - One event per request, in exactly the contract's shape, without `server_timestamp`.
 - A custom sGTM client claims the request. It answers `401` for a wrong secret and `400` for a body that doesn't match the contract.
 - The server container stores only the SHA-256 hash of the secret, because the container is exported to this public repository. The secret itself lives only in the app's runtime secrets.
+- The secret must be 32 bytes from a cryptographically secure random generator, e.g. `openssl rand -base64 32`, never a value a person chose. The hash is public, so a guessable secret could be found by brute force.
 - Each environment has its own secret.
 - sGTM answers `200` once it has accepted the event, whether or not the BigQuery insert later succeeds.
 

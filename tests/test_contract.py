@@ -148,6 +148,27 @@ def test_unknown_format_is_refused():
         generate_contract.validate(contract)
 
 
+@pytest.mark.parametrize(
+    "broken",
+    [
+        None,
+        {"version": "1.0.0"},
+        {"version": "1.0.0", "common_fields": [], "events": {"login": None}},
+        {"version": "1.0.0", "common_fields": ["event_id"], "events": {}},
+    ],
+)
+def test_malformed_contract_gives_a_contract_error(broken):
+    with pytest.raises(generate_contract.ContractError):
+        generate_contract.validate(broken)
+
+
+def test_hand_written_package_files_exist():
+    package = generate_contract.PYTHON_MODELS.parent
+    assert (package / "__init__.py").is_file()
+    # Without this marker, type checkers ignore the package's type hints.
+    assert (package / "py.typed").is_file()
+
+
 def test_invalid_contract_is_refused():
     contract = generate_contract.load_contract()
     contract["events"]["StoryGenerated"] = contract["events"]["story_generated"]

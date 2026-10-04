@@ -52,12 +52,22 @@ class ContractError(Exception):
 
 
 def load_contract() -> dict[str, Any]:
-    contract = yaml.safe_load(CONTRACT.read_text())
+    try:
+        contract = yaml.safe_load(CONTRACT.read_text())
+    except yaml.YAMLError as error:
+        raise ContractError(f"not valid YAML: {error}") from error
     validate(contract)
     return contract
 
 
 def validate(contract: dict[str, Any]) -> None:
+    if not isinstance(contract, dict):
+        raise ContractError("the file must be a mapping with version, common_fields, and events")
+    if not isinstance(contract.get("common_fields"), list):
+        raise ContractError("common_fields must be a list of fields")
+    if not isinstance(contract.get("events"), dict):
+        raise ContractError("events must be a mapping of event name to definition")
+
     if not SEMVER.match(str(contract.get("version", ""))):
         raise ContractError("version must be a semantic version, e.g. 1.0.0")
 
@@ -67,13 +77,17 @@ def validate(contract: dict[str, Any]) -> None:
         if field["name"] in names:
             raise ContractError(f"common field {field['name']} is defined twice")
         names.add(field["name"])
+        if field["type"] == "record" and not isinstance(field.get("fields"), list):
+            raise ContractError(f"{field['name']}: a record needs a list of fields")
         if field.get("set_by") not in SETTERS:
             raise ContractError(f"{field['name']}: set_by must be one of {SETTERS}")
         for sub_field in field.get("fields", []):
             validate_field(sub_field, where=field["name"])
 
     for name, event in contract["events"].items():
-        if not EVENT_NAME.match(name):
+        if not isinstance(event, dict):
+            raise ContractError(f"event {name}: must be a mapping")
+        if not EVENT_NAME.match(str(name)):
             raise ContractError(f"event {name}: names are snake_case, at most 40 characters")
         if event.get("source") not in SOURCES:
             raise ContractError(f"event {name}: source must be one of {SOURCES}")
@@ -82,6 +96,8 @@ def validate(contract: dict[str, Any]) -> None:
         if not event.get("event_time"):
             raise ContractError(f"event {name}: event_time must say which moment event_timestamp is")
         for prop_name, prop in (event.get("properties") or {}).items():
+            if not isinstance(prop, dict):
+                raise ContractError(f"event {name}: property {prop_name} must be a mapping")
             validate_field({"name": prop_name, **prop}, where=f"event {name}")
             if prop["type"] not in PROPERTY_TYPES:
                 raise ContractError(
@@ -90,8 +106,10 @@ def validate(contract: dict[str, Any]) -> None:
 
 
 def validate_field(field: dict[str, Any], *, where: str) -> None:
+    if not isinstance(field, dict):
+        raise ContractError(f"{where}: every field must be a mapping")
     name = field.get("name", "")
-    if not FIELD_NAME.match(name):
+    if not FIELD_NAME.match(str(name)):
         raise ContractError(f"{where}: field name {name!r} must be snake_case")
     if field.get("type") not in BIGQUERY_TYPES:
         raise ContractError(f"{where}: {name} has unknown type {field.get('type')!r}")

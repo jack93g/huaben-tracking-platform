@@ -310,7 +310,7 @@ This repository is public, so entries leave out individual account names, organi
   - **The server container stores only the SHA-256 hash of the secret.** The client hashes the incoming header and compares. The secret itself lives only in the app's runtime secrets.
 - **Why:**
   - The GA4 client with Measurement Protocol payloads would tie the payload to GA4's format and limits, and it doesn't check a secret.
-  - The server container is exported to this public repository (D-010), so a secret stored in it would leak. A hash of a 32-byte random secret can't be reversed.
+  - The server container is exported to this public repository (D-010), so a secret stored in it would leak. A hash of a 32-byte random secret can't be reversed. A hash of a guessable one could be found by brute force, so the secret must come from a cryptographically secure random generator and never be chosen by a person.
   - Reading the secret from Secret Manager at runtime would also keep it out of the container, but needs an IAM grant, an API call on each cold start, and more template code.
   - TLS already protects the header in transit, so signing each request would add complexity without a matching benefit.
 - **Consequences:**
