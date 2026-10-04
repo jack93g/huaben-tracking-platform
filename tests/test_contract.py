@@ -162,6 +162,14 @@ def test_malformed_contract_gives_a_contract_error(broken):
         generate_contract.validate(broken)
 
 
+def test_second_json_common_field_is_refused():
+    contract = generate_contract.load_contract()
+    extra = dict(contract["common_fields"][-1], name="context")
+    contract["common_fields"].append(extra)
+    with pytest.raises(generate_contract.ContractError):
+        generate_contract.validate(contract)
+
+
 def test_hand_written_package_files_exist():
     package = generate_contract.PYTHON_MODELS.parent
     assert (package / "__init__.py").is_file()

@@ -276,7 +276,7 @@ Recommendation: one container per environment.
 
 ## 6. dbt modeling
 
-- Set up a dbt Core project against BigQuery (D-025), with `dev` and `prod` targets. The source definition and its tests are generated from the contract into `dbt/models/staging/_contract__sources.yml`.
+- Set up a dbt Core project against BigQuery (D-025), with `dev` and `prod` targets. The source definition and its tests are generated from the contract into `dbt/models/staging/_contract__sources.yml`. Pin dbt-core to 1.10.5 or later: the generated tests use the `arguments` property (D-018).
 - Build `stg_events`: incremental, typed, cleaned, and deduplicated on `event_id`, with a 3-day lookback window (D-023).
 - Build an identity-map model (`anonymous_id` → `user_id`) that implements the identity rules in D-020.
 - Build `fct_events`: frontend and backend events joined on identity, with `user_id` backfilled per the identity map.

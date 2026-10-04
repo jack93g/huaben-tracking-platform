@@ -79,6 +79,8 @@ def validate(contract: dict[str, Any]) -> None:
         names.add(field["name"])
         if field["type"] == "record" and not isinstance(field.get("fields"), list):
             raise ContractError(f"{field['name']}: a record needs a list of fields")
+        if field["type"] == "json" and field["name"] != "properties":
+            raise ContractError(f"{field['name']}: properties is the only JSON common field")
         if field.get("set_by") not in SETTERS:
             raise ContractError(f"{field['name']}: set_by must be one of {SETTERS}")
         for sub_field in field.get("fields", []):
@@ -311,10 +313,11 @@ def render_python_models(contract: dict[str, Any]) -> str:
 
 
 def render_python_pyproject(contract: dict[str, Any]) -> str:
+    version = contract["version"]
     return f"""# {HEADER}
 [project]
 name = "huaben-tracking-contract"
-version = "{contract["version"]}"
+version = "{version}"
 description = "Pydantic models for the Huaben tracking contract's backend events."
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7,<3"]
