@@ -188,7 +188,10 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:** The workflows put D-013 and D-015 into practice. The up-to-date rule means the plan you reviewed was made against the latest `main`. The prod plan before the gate means you approve based on prod as it is now, not on a PR plan that may be out of date.
 - **Consequences:**
   - Workflow logs are public, so plans must not print secrets.
-  - Dependabot and fork PRs can't get an OIDC token, so their plan jobs are skipped. A skipped job still satisfies the required check, and Dependabot changes are planned again by the apply jobs after merging, where prod still needs approval.
+  - Dependabot and fork PRs can't get an OIDC token, so they aren't planned. Their plan jobs run, skip every step, and report success. Dependabot changes are planned again by the apply jobs after merging, where prod still needs approval.
+    - *Amended 2026-10-04.* The first version skipped the whole plan job for these PRs, on the assumption that a skipped job satisfies a required check. That holds for an ordinary job, but a matrix job skipped as a whole never expands its matrix: it reported one check named `plan (${{ matrix.env }})`, so `plan (dev)` and `plan (prod)` never arrived and the first Dependabot PRs couldn't be merged. The condition moved from the job to its steps.
+    - A green plan check on a Dependabot or fork PR therefore means "not planned", and the job's notice says so.
+    - Whether a PR counts as Dependabot's is now decided by its author, not by who triggered the run, so updating a Dependabot branch by hand doesn't make its code run with the plan account's access.
   - Dependabot doesn't cover `mise.toml`.
 
 ### D-017: Event naming, and the MVP's events
