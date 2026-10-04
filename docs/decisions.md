@@ -364,8 +364,9 @@ This repository is public, so entries leave out individual account names, organi
   - Until the tracking domain exists (TP-3), a live tag would send straight to Google. TP-2 verifies the dataLayer and variables in Preview; the tag goes live only once it points at sGTM.
   - Google's tag sets its own `_ga` cookies once consent is granted. The identity is still D-020's: `client_id` isn't stored.
   - The GA4 client's path takes no secret, like any browser collection endpoint, so anyone can post to it. This is why the mapping fixes `source` and refuses backend event names.
+  - That only stops a browser event passing as a backend one. It doesn't stop forged frontend events, made-up identifiers, or bulk spam. How far to guard against those is TP-4's decision.
   - Page views from users who decline are missing from the warehouse. Backend events aren't affected (D-021).
-  - Revisit basic mode when GA4 or Google Ads forwarding is added. Changing it means a new decision that supersedes this part and D-021's frontend rule.
+  - Revisit basic mode when GA4 or Google Ads forwarding is added. Changing it is a reversal, so it takes a new entry that supersedes both this one and D-021 and restates what's kept from each.
 
 ### D-028: One web GTM container, with GTM Environments
 
@@ -393,6 +394,7 @@ This repository is public, so entries leave out individual account names, organi
   - It's loaded by Cookiebot's tag template in the web container, on the Consent Initialization trigger, so it runs before every other tag.
   - The template sets the Consent Mode v2 defaults and updates (D-021). Every other tag is gated by its consent settings in GTM.
   - The frontend reads the consent state from Cookiebot, behind one small module. That module decides whether the identity cookies exist and what `X-Tracking-Consent` says (D-020).
+  - The module follows Cookiebot's events, not a single read at startup. Until Cookiebot has reported, consent is unknown and counts as denied. When it reports or changes to granted, the module creates the identifiers, starts the headers, and sends the `page_view` for the page being shown. When it changes to denied, it deletes the cookies and stops the headers.
   - `localhost` and `localhost:3000` are added as domain aliases, so the banner runs on the local dev server.
 - **Why:**
   - Cookiebot through its GTM template is the setup most likely to be met in an e-commerce shop, which is what this project is practice for. Consent is configured in one place, GTM, and a change to it is a publish, promoted through the same Environments as the tags (D-028).
@@ -418,6 +420,7 @@ These are tracked in their tickets and move to **Accepted** once decided.
 | Minimum Cloud Run instances | TP-3 | 0 in both environments |
 | Tracking DNS records | TP-3 | Cloudflare Terraform provider, DNS-only records |
 | Behaviour for malformed events | TP-4 | An `events_rejected` table |
+| Guarding the browser path against forged events and spam (D-027) | TP-4 | Validate against the contract and limit sizes; accept the rest for the MVP |
 | Backend delivery | TP-5 | Postgres outbox, sent by the existing worker |
 | Which backend events are in the MVP | TP-5 | Only `story_generated` is required; `login` and `quiz_submitted` are already in the contract (D-017) |
 | Cleanup of per-PR dbt datasets | TP-6 | Open |

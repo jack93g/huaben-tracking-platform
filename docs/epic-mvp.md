@@ -174,6 +174,7 @@ Recommendation: one container per environment.
   - Add `localhost` and `localhost:3000` as domain aliases, and first confirm that the free plan allows them. If it doesn't, fall back to vanilla-cookieconsent.
   - Check that the banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
   - Read the consent state in one small module of the frontend, which the identity cookies and the `X-Tracking-Consent` header depend on.
+  - The module follows Cookiebot's events. Cookiebot's script loads after the app starts, so a single read at startup would see no consent yet. Verify both orders: a returning visitor who already accepted gets identifiers and a `page_view` on first load, and a new visitor gets them as soon as they accept, without a reload.
   - Set each tag's consent settings in GTM.
 - Strip query strings from `page_location` and `referrer`, keeping only allowlisted parameters, so emails and tokens in URLs aren't sent on. The allowlist is `id` on `/story` (story pages are `/story?id=…`, and without it they'd all look the same). Everything else, such as `fresh`, is dropped.
 - Verify in GTM Preview.
@@ -240,6 +241,12 @@ Recommendation: one container per environment.
   - validate in sGTM and write rejects, with their raw payload and the reason, to an `events_rejected` table
 
   Recommendation: the rejects table, so nothing is lost silently.
+- **Guarding the browser path (D-027).** The GA4 client's path takes no secret, so anyone can post forged `page_view` events, made-up identifiers, or bulk spam. Options:
+  - validate each event against the contract (known event name, UUID identifiers, property types) and limit string lengths and request size
+  - also check the request's `Origin` against the site's hostnames, which stops casual misuse but is trivially forged outside a browser
+  - rate limit, which Cloud Run can't do by itself: it needs Cloud Armor, and so the load balancer (TP-3)
+
+  Recommendation: validation and size limits, with the `Origin` check, and accept the rest for the MVP. Bulk spam is bounded by the Cloud Run instance limit and shows up in the budget alerts.
 
 **Note:** Writes from sGTM to BigQuery are best-effort. A failed insert is logged but not retried. The durable upgrade is Pub/Sub with a BigQuery subscription (after the MVP).
 

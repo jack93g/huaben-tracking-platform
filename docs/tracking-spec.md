@@ -118,6 +118,7 @@ This section hasn't been reviewed by a lawyer.
 - sGTM maps the GA4-shaped event to the contract's row before storing it, and builds the `consent` record from the request's Consent Mode state.
 - This path takes no secret, so anyone can post to it. The mapping therefore always sets `source` to `frontend` and refuses the names of backend events.
 - Consent Mode runs in basic mode: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied.
+- So a frontend event's `analytics_storage` is always `granted`. A page view from someone who declined isn't stored as denied; it's absent.
 - Google's tag sets its own `_ga` cookies once consent is granted. Its `client_id` isn't stored; the identity is the one described above.
 
 ## Sending backend events to sGTM (D-024)
