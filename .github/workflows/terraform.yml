@@ -22,13 +22,7 @@ env:
 jobs:
   plan:
     name: plan (${{ matrix.env }})
-    # Fork and Dependabot runs get no OIDC token, so they can't authenticate.
-    # A skipped job still satisfies the required check; Dependabot changes are
-    # planned again by the apply jobs after merging.
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.head.repo.full_name == github.repository
-      && github.actor != 'dependabot[bot]'
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,26 +31,47 @@ jobs:
       fail-fast: false
       matrix:
         env: [dev, prod]
+    env:
+      # Fork and Dependabot pull requests are not planned: they get no OIDC
+      # token, and their code must not run with the plan account's access.
+      # The condition is on the steps, not the job, because a matrix job that
+      # is skipped as a whole never reports `plan (dev)` and `plan (prod)`,
+      # and the ruleset would wait for those checks forever (D-016). Here the
+      # job runs, skips every step, and reports success. Dependabot changes
+      # are planned again by the apply jobs after merging.
+      CAN_PLAN: >-
+        ${{ github.event.pull_request.head.repo.full_name == github.repository
+        && github.event.pull_request.user.login != 'dependabot[bot]' }}
     defaults:
       run:
         working-directory: infra/envs/${{ matrix.env }}
     steps:
+      - name: Skip the plan for fork and Dependabot pull requests
+        if: env.CAN_PLAN != 'true'
+        working-directory: .
+        run: echo "::notice::No plan was run for this pull request. It is planned by the apply jobs after merging."
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.CAN_PLAN == 'true'
         with:
           persist-credentials: false
 
       - uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        if: env.CAN_PLAN == 'true'
 
       - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        if: env.CAN_PLAN == 'true'
         with:
           workload_identity_provider: ${{ env.WIF_PROVIDER }}
           service_account: tf-plan-${{ matrix.env }}@${{ env.SA_DOMAIN }}
 
       - name: terraform init
+        if: env.CAN_PLAN == 'true'
         run: terraform init
 
       # The plan accounts can't write state, so they can't take the state lock.
       - name: terraform plan
+        if: env.CAN_PLAN == 'true'
         run: terraform plan -lock=false -no-color
 
   apply-dev:
