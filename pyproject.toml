@@ -9,4 +9,11 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
+    "pydantic>=2.13.5",
+    "pytest>=9.1.1",
+    "pyyaml>=6.0.3",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts", "contract/python/src"]

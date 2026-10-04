@@ -1,0 +1,94 @@
+# Generated from contract/events.yaml by scripts/generate_contract.py. Do not edit.
+version: 2
+sources:
+- name: analytics
+  description: Raw events written by sGTM.
+  database: '{{ target.database }}'
+  schema: analytics
+  tables:
+  - name: events
+    description: One row per received event, contract version 1.0.0. Delivery is at-least-once, so event_id is not unique here.
+    columns:
+    - name: event_id
+      description: UUID v4 generated once where the event happens. Retries reuse it, so it is the deduplication key.
+      data_tests:
+      - not_null
+    - name: event_name
+      description: The event's name, one of the events in the contract.
+      data_tests:
+      - not_null
+      - accepted_values:
+          arguments:
+            values:
+            - page_view
+            - story_generated
+            - login
+            - quiz_submitted
+    - name: schema_version
+      description: Version of the tracking contract the sender was built against.
+      data_tests:
+      - not_null
+    - name: source
+      description: Where the event was produced. Each event has exactly one source.
+      data_tests:
+      - not_null
+      - accepted_values:
+          arguments:
+            values:
+            - frontend
+            - backend
+    - name: event_timestamp
+      description: When the event happened, in UTC, as defined by the event's event_time. Set once; retries and delayed delivery never change it.
+      data_tests:
+      - not_null
+    - name: server_timestamp
+      description: When sGTM received the event, in UTC. The table is partitioned on it.
+      data_tests:
+      - not_null
+    - name: user_id
+      description: The app's user ID as a string. Null when nobody is logged in.
+    - name: anonymous_id
+      description: UUID v4 identifying the browser. Null without analytics consent.
+    - name: session_id
+      description: UUID v4 identifying the browser session. Null without analytics consent.
+    - name: consent
+      description: Consent Mode v2 signals at the time of the event.
+      data_tests:
+      - not_null
+    - name: consent.analytics_storage
+      description: Consent for analytics identifiers. Unknown counts as denied.
+      data_tests:
+      - not_null
+      - accepted_values:
+          arguments:
+            values:
+            - granted
+            - denied
+    - name: consent.ad_storage
+      description: Consent for advertising identifiers. Null when not collected.
+      data_tests:
+      - accepted_values:
+          arguments:
+            values:
+            - granted
+            - denied
+    - name: consent.ad_user_data
+      description: Consent to send user data to advertising platforms. Null when not collected.
+      data_tests:
+      - accepted_values:
+          arguments:
+            values:
+            - granted
+            - denied
+    - name: consent.ad_personalization
+      description: Consent for personalised advertising. Null when not collected.
+      data_tests:
+      - accepted_values:
+          arguments:
+            values:
+            - granted
+            - denied
+    - name: properties
+      description: Event-specific properties, as defined per event in the contract. An empty object when there are none.
+      data_tests:
+      - not_null

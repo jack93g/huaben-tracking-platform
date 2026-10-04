@@ -191,6 +191,158 @@ This repository is public, so entries leave out individual account names, organi
   - Dependabot and fork PRs can't get an OIDC token, so their plan jobs are skipped. A skipped job still satisfies the required check, and Dependabot changes are planned again by the apply jobs after merging, where prod still needs approval.
   - Dependabot doesn't cover `mise.toml`.
 
+### D-017: Event naming, and the MVP's events
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - Event names are snake_case and at most 40 characters.
+  - An event that really is a GA4 event uses GA4's name (`page_view`, `login`, `sign_up`). Every other event is a custom event named `object_action` in the past tense (`story_generated`, `quiz_submitted`).
+  - Custom events never borrow another event's meaning: `story_generated` isn't sent as a purchase and carries no e-commerce parameters.
+  - Each event has exactly one source, the frontend or the backend.
+  - The MVP's events are `page_view` (frontend) and `story_generated` (backend, successful generations only).
+  - The contract also defines `login` (successful logins only) and `quiz_submitted`, both from the backend. Whether the app sends them in the MVP is TP-5's decision.
+  - Failures aren't events, and content isn't sent: no attempted usernames, topic text, or quiz answers.
+- **Why:** Strict `object_action` would be more consistent, and GA4's names everywhere would need no mapping, but GA4 has no names for most of the app's events. The hybrid keeps GA4 compatibility for the after-MVP plan and stays honest about what each event is.
+- **Consequences:**
+  - Custom events don't fill GA4's built-in e-commerce reports. They'd be marked as key events instead.
+  - The app has no sign-up and no "add vocabulary" action, which is why `login` and `quiz_submitted` replaced the epic's earlier candidates. The app can gain features such as sign-up later, and their events are added then.
+
+### D-018: The contract is a YAML file, with generated outputs and one version
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - `contract/events.yaml` is the single source. `scripts/generate_contract.py` generates the BigQuery schema, the dbt source tests, and the backend's Pydantic models from it. The generated files are committed.
+  - A pre-commit hook runs the generator with `--check`, so the existing `pre-commit` required check fails when the generated files are out of date.
+  - The contract has one semantic version, carried by every event as `schema_version`: minor for additive changes, major for breaking ones.
+  - The app installs the Pydantic models as a uv git dependency, pinned to a `contract-v<version>` tag of this repository.
+- **Why:**
+  - YAML with a small generator is easy to read and gives full control of the output. JSON Schema is a standard but verbose, and would still need custom code for BigQuery and dbt. Pydantic as the source would hide the contract inside Python.
+  - A pinned git dependency makes a contract upgrade a reviewed version bump in the app. Copying the file in would drift silently.
+- **Consequences:**
+  - Property definitions use a JSON-Schema-like subset (`type`, `required`, `enum`, `minimum`, `maximum`), so a later move to JSON Schema stays possible.
+  - Models are generated only for backend events, so the backend can't send a frontend event.
+  - The dbt tests need dbt 1.10.5 or later, for the `arguments` property.
+
+### D-019: Typed common fields plus a JSON `properties` column, partitioned on `server_timestamp`
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:** `analytics.events` has one typed column per common field and a `properties` JSON column for everything event-specific. It's partitioned by day on `server_timestamp`.
+- **Why:**
+  - Adding an event or a property never touches the table. A typed column per property, or a table per event, would change the schema with every event, and Terraform replaces a table, losing its data, on any change that isn't additive.
+  - `server_timestamp` comes from a clock the platform controls. Client clocks drift, and a wrong one could put an event into a partition that has already expired.
+- **Consequences:**
+  - Property types aren't enforced by BigQuery. They're checked in sGTM (TP-4) and by dbt tests.
+  - Common fields can only be added. The table gets `deletion_protection` (TP-4).
+
+### D-020: Identity: identifiers, propagation, and stitching
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - **`user_id`** is the user's ID in the app's database, as a string. Usernames and email addresses are never sent.
+  - **`anonymous_id`** is a UUID the frontend generates and keeps in a first-party cookie on `huaben.app`, for 13 months from first set.
+  - **`session_id`** is a UUID the frontend generates, ending after 30 minutes without activity.
+  - **Propagation:** the frontend sends `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call. The API treats them as untrusted and drops anything that isn't a UUID. `user_id` always comes from the login session.
+  - **Logout** replaces `anonymous_id` and starts a new session.
+  - **Stitching, applied by dbt:** an event keeps its own `user_id`. An event without one gets the first `user_id` seen after it on the same `anonymous_id`, within 30 days, and never an earlier one.
+- **Why:**
+  - The app's ID already exists and joins straight to app data. The column is a string, so a random analytics ID could replace it later without a schema change.
+  - A cookie is shared between `huaben.app` and `www.huaben.app`; `localStorage` isn't. A cookie set by sGTM would gain nothing, because Safari caps it at 7 days when the tracking domain's IP differs from the site's.
+  - Headers are explicit and work the same in every environment. Reading the cookie in the API would depend on the API staying under `huaben.app`.
+  - Rotating on logout stops the next person on a shared device inheriting the previous one's history. The "never an earlier one" rule does the same when a session expires without a logout.
+- **Consequences:**
+  - The app must add the three headers to its CORS allowed headers, return the user's ID from `/auth/me`, and store `user_id` and the identity context on each generation request (TP-2, TP-5).
+  - Safari limits script-set cookies to 7 days, so a logged-out Safari visitor gets a new `anonymous_id` after a week away. Login re-links them.
+  - User IDs are sequential database keys. They must be replaced or hashed before being forwarded to a third party.
+  - The stitching rules live in dbt, so they can change without losing data.
+
+### D-021: Consent
+
+*Accepted 2026-10-04 · TP-1 · not legally reviewed*
+
+- **Decision:**
+  - The signal is Consent Mode v2's `analytics_storage`. Every event records the consent state, and unknown counts as denied.
+  - An event produced later by the worker records the consent state from when the request was made.
+  - An event with no identifiers at all is valid, e.g. a generation made with the shared API key.
+  - **Frontend, consent denied:** no identifiers are created and no events are sent.
+  - **Backend, consent denied:** events are still sent, with `user_id` but without `anonymous_id` or `session_id`.
+  - Nothing is forwarded to a third party unless the event's consent state is `granted`.
+- **Why:**
+  - Events without identifiers ("cookieless pings") probably still need consent under the EDPB's 2023 reading of ePrivacy.
+  - A backend event records something the user did in the app, which the app's database already holds, like an order in a shop. Keeping it in the platform's own warehouse rests on legitimate interest. Dropping these events would make the counts wrong.
+- **Consequences:**
+  - The app needs a privacy notice that covers this.
+  - Withdrawing consent deletes both cookies and stops the identity headers.
+  - This should be checked by someone qualified before the app is opened to the public.
+
+### D-022: Retention
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - Raw `analytics.events`: 14 months, by partition expiration.
+  - Event-level dbt models: 14 months, so they can't outlive the raw data.
+  - Aggregates with no identifiers: no limit.
+  - `events_rejected`: 30 days.
+  - Cloud Logging: 30 days.
+  - Outbox rows already sent, in the app: 7 days.
+- **Why:** 14 months allows a year-over-year comparison of any month and matches GA4's standard maximum. Storage cost is negligible at this volume, so privacy decides it. Rejected events hold raw payloads that could contain anything, so they're kept only long enough to debug.
+- **Consequences:** Erasure on request is separate from expiry: a user's rows are deleted by `user_id` from the raw and derived tables. TP-7 documents and tests the procedure.
+
+### D-023: Late-event tolerance: a 3-day lookback, with the outbox giving up after 48 hours
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:** dbt removes duplicates by `event_id`, looking back 3 days on `server_timestamp`. The outbox retries an event for up to 48 hours and then marks it dead. An event is never rejected for being late.
+- **Why:** Browser events aren't retried, so duplicates only come from an outbox retry after an attempt that had in fact succeeded. The gap between duplicates is therefore bounded by how long the outbox retries, and the lookback covers that with a day's margin.
+- **Consequences:** Resending a dead row by hand after more than 3 days needs a full refresh of `stg_events`.
+
+### D-024: The backend's sGTM client, and its secret
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - A custom sGTM client (D-009) accepts one event per `POST`, in exactly the contract's shape. It answers 401 for a wrong secret and 400 for a body that doesn't match, and it sets `server_timestamp`.
+  - The secret is a plain header (`X-Tracking-Secret`) of 32 random bytes, one per environment.
+  - **The server container stores only the SHA-256 hash of the secret.** The client hashes the incoming header and compares. The secret itself lives only in the app's runtime secrets.
+- **Why:**
+  - The GA4 client with Measurement Protocol payloads would tie the payload to GA4's format and limits, and it doesn't check a secret.
+  - The server container is exported to this public repository (D-010), so a secret stored in it would leak. A hash of a 32-byte random secret can't be reversed. A hash of a guessable one could be found by brute force, so the secret must come from a cryptographically secure random generator and never be chosen by a person.
+  - Reading the secret from Secret Manager at runtime would also keep it out of the container, but needs an IAM grant, an API call on each cold start, and more template code.
+  - TLS already protects the header in transit, so signing each request would add complexity without a matching benefit.
+- **Consequences:**
+  - This replaces the epic's earlier plan to keep the shared secret in Secret Manager. Nothing about it is stored in GCP.
+  - Rotating the secret is a GTM publish plus an update on the Droplet. The client accepts two hashes during a rotation, to avoid downtime.
+
+### D-025: dbt Core, not Dataform
+
+*Accepted 2026-10-04 · TP-6*
+
+- **Decision:** The models are built with dbt Core, run by GitHub Actions.
+- **Why:** Dataform is free, BigQuery-native, and needs no runner. dbt is the more widely used tool, works with any warehouse, and has the larger ecosystem, and this project is partly a way to learn a standard stack. Its runner is a GitHub Actions cron job on a pattern the repo already has.
+- **Consequences:** The contract generates dbt test YAML (D-018).
+
+### D-026: `event_timestamp` is the business time, defined per event
+
+*Accepted 2026-10-04 · TP-1*
+
+- **Decision:**
+  - The source's timestamp is called `event_timestamp`, not `client_timestamp` as first planned.
+  - It's the moment the thing the event describes became true, and every event in the contract says which moment that is (`event_time`). For `story_generated` it's when the generation completed, the same value as the request's `completed_at` in the app.
+  - It's set once, when the event is created. Retries and delayed delivery never change it. The Pydantic models have no default for it, so the caller has to pass it.
+  - `server_timestamp` is separate: when sGTM received the event.
+- **Why:**
+  - "When the event happened at its source" was ambiguous for an event produced by the worker: it could mean request time, completion time, or the time the outbox row was written.
+  - `client_timestamp` reads as "the browser's clock", which is wrong for backend events.
+  - A default of "now" would silently become delivery time if the model were built when the event is sent.
+- **Consequences:**
+  - A frontend event's `event_timestamp` comes from the browser's clock and can be wrong. `source` says which kind of clock produced it, and the table is partitioned on `server_timestamp` (D-019).
+  - The gap between the two timestamps is the delivery delay.
+  - The generator refuses an event without an `event_time`.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
@@ -202,11 +354,10 @@ These are tracked in their tickets and move to **Accepted** once decided.
 | Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
 | Minimum Cloud Run instances | TP-3 | 0 in both environments |
 | Tracking DNS records | TP-3 | Cloudflare Terraform provider, DNS-only records |
-| Consent management platform and Consent Mode v2 | TP-2 | Adopt Consent Mode v2 now |
-| Contract format, property storage, partition column, identity lifecycle, consent-denied behaviour, retention, late-event tolerance | TP-1 | See TP-1 |
-| sGTM backend client: custom client or the GA4 client | TP-1 | Open |
+| Consent management platform (Consent Mode v2 is adopted, D-021) | TP-2 | Cookiebot's free plan; CookieYes or the self-hosted vanilla-cookieconsent are the alternatives |
 | Behaviour for malformed events | TP-4 | An `events_rejected` table |
 | Backend delivery | TP-5 | Postgres outbox, sent by the existing worker |
-| Which backend events are in the MVP | TP-5 | Only `story_generated` is required |
+| Which backend events are in the MVP | TP-5 | Only `story_generated` is required; `login` and `quiz_submitted` are already in the contract (D-017) |
+| How browser events reach sGTM: the GA4 client or the custom client | TP-2 | Open |
 | Cleanup of per-PR dbt datasets | TP-6 | Open |
 | Whether TP-7 and TP-8 are in the MVP | Epic | TP-7 yes; TP-8 only the failed-insert and freshness alerts |

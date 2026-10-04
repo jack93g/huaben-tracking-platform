@@ -1,0 +1,219 @@
+# The tracking contract: the single source for the BigQuery schema, the dbt
+# source tests, and the backend's Pydantic models (D-018).
+#
+# After changing this file, run `python scripts/generate_contract.py` and commit
+# the generated files with it. The spec is in docs/tracking-spec.md.
+
+# Semantic version of the contract. Every event carries it as `schema_version`.
+# Additive changes bump the minor version; breaking changes bump the major one.
+version: 1.0.0
+
+# Columns of `analytics.events`, in order. Changes here must be additive:
+# Terraform replaces the table, and loses its data, on any other schema change.
+#
+# `set_by` says who fills the field in: `source` is the frontend or the backend,
+# `sgtm` is the server container. Fields set by sGTM are not in the Pydantic models.
+common_fields:
+  - name: event_id
+    type: string
+    format: uuid4
+    required: true
+    set_by: source
+    description: UUID v4 generated once where the event happens. Retries reuse it, so it is the deduplication key.
+  - name: event_name
+    type: string
+    required: true
+    set_by: source
+    description: The event's name, one of the events in the contract.
+  - name: schema_version
+    type: string
+    required: true
+    set_by: source
+    description: Version of the tracking contract the sender was built against.
+  - name: source
+    type: string
+    enum: [frontend, backend]
+    required: true
+    set_by: source
+    description: Where the event was produced. Each event has exactly one source.
+  - name: event_timestamp
+    type: timestamp
+    required: true
+    set_by: source
+    description: When the event happened, in UTC, as defined by the event's event_time. Set once; retries and delayed delivery never change it.
+  - name: server_timestamp
+    type: timestamp
+    required: true
+    set_by: sgtm
+    description: When sGTM received the event, in UTC. The table is partitioned on it.
+  - name: user_id
+    type: string
+    required: false
+    set_by: source
+    description: The app's user ID as a string. Null when nobody is logged in.
+  - name: anonymous_id
+    type: string
+    format: uuid4
+    required: false
+    set_by: source
+    description: UUID v4 identifying the browser. Null without analytics consent.
+  - name: session_id
+    type: string
+    format: uuid4
+    required: false
+    set_by: source
+    description: UUID v4 identifying the browser session. Null without analytics consent.
+  - name: consent
+    type: record
+    required: true
+    set_by: source
+    description: Consent Mode v2 signals at the time of the event.
+    fields:
+      - name: analytics_storage
+        type: string
+        enum: [granted, denied]
+        required: true
+        description: Consent for analytics identifiers. Unknown counts as denied.
+      - name: ad_storage
+        type: string
+        enum: [granted, denied]
+        required: false
+        description: Consent for advertising identifiers. Null when not collected.
+      - name: ad_user_data
+        type: string
+        enum: [granted, denied]
+        required: false
+        description: Consent to send user data to advertising platforms. Null when not collected.
+      - name: ad_personalization
+        type: string
+        enum: [granted, denied]
+        required: false
+        description: Consent for personalised advertising. Null when not collected.
+  - name: properties
+    type: json
+    required: true
+    set_by: source
+    description: Event-specific properties, as defined per event in the contract. An empty object when there are none.
+
+# Event names are snake_case and at most 40 characters. They use GA4's name when
+# the event really is that GA4 event, otherwise object_action in the past tense (D-017).
+# `event_time` says which moment the event's `event_timestamp` is (D-026).
+# Property types: string, integer, number, boolean.
+events:
+  page_view:
+    source: frontend
+    description: A page was shown, on first load and on every client-side route change.
+    event_time: When the page was shown, by the browser's clock.
+    properties:
+      page_location:
+        type: string
+        required: true
+        description: Full URL of the page, with the query string stripped except for allowlisted parameters.
+      page_path:
+        type: string
+        required: true
+        description: Path of the page, starting with a slash.
+      page_title:
+        type: string
+        required: false
+        description: The document title.
+      page_referrer:
+        type: string
+        required: false
+        description: URL of the previous page, stripped the same way as page_location.
+
+  story_generated:
+    source: backend
+    description: The worker finished generating a story successfully. Failed generations send nothing.
+    event_time: When the generation completed, the same value as the request's completed_at in the app. Not when it was requested or delivered.
+    properties:
+      story_id:
+        type: string
+        required: true
+        description: The app's ID of the story that was created.
+      generation_request_id:
+        type: string
+        required: true
+        description: The app's ID of the generation request.
+      target_hsk_level:
+        type: integer
+        required: true
+        minimum: 1
+        maximum: 6
+        description: HSK level the story was requested at.
+      target_word_count:
+        type: integer
+        required: true
+        minimum: 1
+        description: Requested length of the story, in words.
+      target_vocabulary_count:
+        type: integer
+        required: true
+        minimum: 1
+        description: Number of vocabulary items the story was asked to use.
+      has_topic:
+        type: boolean
+        required: true
+        description: Whether the user gave a topic. The topic text itself is never sent.
+      provider:
+        type: string
+        required: true
+        description: The AI provider that generated the story.
+      model:
+        type: string
+        required: true
+        description: The model that generated the story.
+      prompt_version:
+        type: string
+        required: false
+        description: Version of the prompt template.
+      attempt_count:
+        type: integer
+        required: true
+        minimum: 1
+        description: Number of attempts the request took, including the successful one.
+      total_tokens:
+        type: integer
+        required: false
+        minimum: 0
+        description: Prompt plus completion tokens used by the successful attempt.
+      latency_ms:
+        type: integer
+        required: false
+        minimum: 0
+        description: Time the provider took for the successful attempt, in milliseconds.
+
+  login:
+    source: backend
+    description: A user logged in successfully. Failed attempts send nothing.
+    event_time: When the login succeeded.
+    properties:
+      method:
+        type: string
+        required: true
+        enum: [password]
+        description: How the user logged in. GA4's standard parameter for login.
+
+  quiz_submitted:
+    source: backend
+    description: A user submitted their answers to a story's quiz and the attempt was saved.
+    event_time: When the quiz attempt was saved.
+    properties:
+      story_id:
+        type: string
+        required: true
+        description: The app's ID of the story the quiz belongs to.
+      quiz_attempt_id:
+        type: string
+        required: true
+        description: The app's ID of the quiz attempt.
+      question_count:
+        type: integer
+        required: true
+        minimum: 1
+        description: Number of questions in the quiz.
+      correct_count:
+        type: integer
+        required: true
+        minimum: 0
+        description: Number of questions answered correctly. The answers themselves are never sent.

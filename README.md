@@ -10,7 +10,7 @@ Frontend ── page_view ────────┐
 Backend ── story_generated ─► sGTM ─► analytics.events ─► dbt ─► fct_events
 ```
 
-The plan is in [docs/epic-mvp.md](docs/epic-mvp.md), and the reasoning behind it is in [docs/decisions.md](docs/decisions.md).
+The plan is in [docs/epic-mvp.md](docs/epic-mvp.md), and the reasoning behind it is in [docs/decisions.md](docs/decisions.md). What's tracked, and how, is in [docs/tracking-spec.md](docs/tracking-spec.md).
 
 ## Repository layout
 
