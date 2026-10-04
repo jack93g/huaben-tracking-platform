@@ -4,9 +4,9 @@ Generated from contract/events.yaml by scripts/generate_contract.py. Do not edit
 """
 
 from typing import Literal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import UUID4, AwareDatetime, BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -44,14 +44,14 @@ class StoryGeneratedProperties(_Model):
 class StoryGenerated(_Model):
     """The worker finished generating a story successfully. Failed generations send nothing."""
 
-    event_id: UUID = Field(default_factory=uuid4)
+    event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["story_generated"] = "story_generated"
     schema_version: Literal["1.0.0"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the generation completed, the same value as the request's completed_at in the app. Not when it was requested or delivered.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")
-    anonymous_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
-    session_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
+    anonymous_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
+    session_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
     consent: Consent
     properties: StoryGeneratedProperties
 
@@ -65,14 +65,14 @@ class LoginProperties(_Model):
 class Login(_Model):
     """A user logged in successfully. Failed attempts send nothing."""
 
-    event_id: UUID = Field(default_factory=uuid4)
+    event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["login"] = "login"
     schema_version: Literal["1.0.0"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the login succeeded.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")
-    anonymous_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
-    session_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
+    anonymous_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
+    session_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
     consent: Consent
     properties: LoginProperties
 
@@ -89,14 +89,14 @@ class QuizSubmittedProperties(_Model):
 class QuizSubmitted(_Model):
     """A user submitted their answers to a story's quiz and the attempt was saved."""
 
-    event_id: UUID = Field(default_factory=uuid4)
+    event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["quiz_submitted"] = "quiz_submitted"
     schema_version: Literal["1.0.0"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the quiz attempt was saved.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")
-    anonymous_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
-    session_id: UUID | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
+    anonymous_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser. Null without analytics consent.")
+    session_id: UUID4 | None = Field(default=None, description="UUID v4 identifying the browser session. Null without analytics consent.")
     consent: Consent
     properties: QuizSubmittedProperties
 

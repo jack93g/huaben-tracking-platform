@@ -128,6 +128,26 @@ def test_every_backend_event_has_a_model():
         assert hasattr(huaben_tracking_contract, model) == (event["source"] == "backend")
 
 
+@pytest.mark.parametrize("field", ["event_id", "anonymous_id", "session_id"])
+@pytest.mark.parametrize(
+    "value",
+    [
+        "c232ab00-9414-11ec-b3c8-9f6bdeced846",  # v1
+        "0192e4a1-7b5c-7def-8a3b-1234567890ab",  # v7
+    ],
+)
+def test_uuids_must_be_version_4(field, value):
+    with pytest.raises(ValidationError):
+        story_generated(**{field: value})
+
+
+def test_unknown_format_is_refused():
+    contract = generate_contract.load_contract()
+    contract["common_fields"][0]["format"] = "uuid"
+    with pytest.raises(generate_contract.ContractError):
+        generate_contract.validate(contract)
+
+
 def test_invalid_contract_is_refused():
     contract = generate_contract.load_contract()
     contract["events"]["StoryGenerated"] = contract["events"]["story_generated"]

@@ -16,7 +16,7 @@ version: 1.0.0
 common_fields:
   - name: event_id
     type: string
-    format: uuid
+    format: uuid4
     required: true
     set_by: source
     description: UUID v4 generated once where the event happens. Retries reuse it, so it is the deduplication key.
@@ -53,13 +53,13 @@ common_fields:
     description: The app's user ID as a string. Null when nobody is logged in.
   - name: anonymous_id
     type: string
-    format: uuid
+    format: uuid4
     required: false
     set_by: source
     description: UUID v4 identifying the browser. Null without analytics consent.
   - name: session_id
     type: string
-    format: uuid
+    format: uuid4
     required: false
     set_by: source
     description: UUID v4 identifying the browser session. Null without analytics consent.

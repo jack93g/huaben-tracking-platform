@@ -44,6 +44,7 @@ BIGQUERY_TYPES = {
     "record": "RECORD",
 }
 PROPERTY_TYPES = {"string": "str", "integer": "int", "number": "float", "boolean": "bool"}
+FORMATS = ("uuid4",)
 
 
 class ContractError(Exception):
@@ -98,6 +99,8 @@ def validate_field(field: dict[str, Any], *, where: str) -> None:
         raise ContractError(f"{where}: {name} must say required: true or false")
     if not field.get("description"):
         raise ContractError(f"{where}: {name} needs a description")
+    if "format" in field and field["format"] not in FORMATS:
+        raise ContractError(f"{where}: {name} has unknown format {field['format']!r}")
 
 
 # --- BigQuery ---------------------------------------------------------------
@@ -191,8 +194,8 @@ def literal(values: list[str]) -> str:
 def python_type(field: dict[str, Any]) -> str:
     if field.get("enum"):
         return literal(field["enum"])
-    if field.get("format") == "uuid":
-        return "UUID"
+    if field.get("format") == "uuid4":
+        return "UUID4"
     if field["type"] == "timestamp":
         return "AwareDatetime"
     return PROPERTY_TYPES[field["type"]]
@@ -222,9 +225,9 @@ def render_python_models(contract: dict[str, Any]) -> str:
         f'"""Pydantic models for the backend\'s events.\n\n{HEADER}\n"""',
         "",
         "from typing import Literal",
-        "from uuid import UUID, uuid4",
+        "from uuid import uuid4",
         "",
-        "from pydantic import AwareDatetime, BaseModel, ConfigDict, Field",
+        "from pydantic import UUID4, AwareDatetime, BaseModel, ConfigDict, Field",
         "",
         f"SCHEMA_VERSION = {json.dumps(version)}",
         "",
@@ -257,7 +260,7 @@ def render_python_models(contract: dict[str, Any]) -> str:
                 continue
             field_name = field["name"]
             if field_name == "event_id":
-                lines.append("    event_id: UUID = Field(default_factory=uuid4)")
+                lines.append("    event_id: UUID4 = Field(default_factory=uuid4)")
             elif field_name == "event_name":
                 lines.append(f"    event_name: {literal([name])} = {json.dumps(name)}")
             elif field_name == "schema_version":

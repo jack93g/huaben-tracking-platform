@@ -86,7 +86,7 @@ Every event has these fields. They're the columns of `analytics.events`.
 | `X-Session-Id` | The `session_id`, only with consent |
 | `X-Tracking-Consent` | `granted` or `denied` |
 
-- The API treats the headers as untrusted. A value that isn't a UUID is dropped.
+- The API treats the headers as untrusted. A value that isn't a UUID v4 is dropped.
 - A missing `X-Tracking-Consent` header means `denied`.
 - `user_id` always comes from the login session, never from a header.
 - An event produced later by the worker uses the values captured when the request was made. They're stored with the request.
