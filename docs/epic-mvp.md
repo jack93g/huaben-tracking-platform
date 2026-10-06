@@ -155,35 +155,67 @@ Recommendation: one container per environment.
 
 ## 2. Set up GTM Web
 
-- Create and configure the web container, with a `dev` GTM Environment (D-028), and add it to the frontend. The build chooses the snippet: the `dev` environment's on the local dev server, Live on GitHub Pages.
-  - The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables. Add them to the app's `deploy-frontend.yml`.
-- Implement the dataLayer interface and generate `anonymous_id` and `session_id` per the contract (D-020). Only set identifiers when the consent decision allows it.
-  - Generate them in the frontend's own code, not in a GTM tag, and push them to the dataLayer. The API calls need them too, outside GTM.
-  - On logout, replace `anonymous_id` and start a new session (D-020).
-  - When consent is withdrawn, delete both cookies and stop sending the identity headers (D-021).
-  - `schema_version` is a constant in the frontend's tracking code, set to the contract version it was built against and changed by hand when that changes.
-- **App change:** `/auth/me` returns only the username today. Make it return the user's ID too, so the frontend can set `user_id`.
-- **App change:** send the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call (D-020).
-  - The API's CORS allowed headers are only `Content-Type` and `X-API-Key` today, so a request carrying the new headers fails its preflight. Add the three headers to the allowed list and deploy the API **before** the frontend starts sending them.
-  - The API ignores the headers until TP-5, which reads and stores them.
-- The frontend is a Next.js single-page app, so fire `page_view` on every client-side route change, not only on page load.
-  - The first `page_view` after a load waits for the session check (`/auth/me`), so it carries `user_id` when someone is logged in. On the login screen it's sent without one.
-- Implement initial browser events, starting with `page_view`. They're sent with the GA4 tag, in basic consent mode, with the contract's own fields as event parameters (D-027).
-- Configure the consent state with Cookiebot (D-029).
-  - Load it with Cookiebot's tag template in the web container, on the Consent Initialization trigger. Review the template's permissions before adding it.
+**Decided (2026-10-04).**
+- **Transport** (D-027): browser events are sent with the GA4 tag to the GA4 client in sGTM, in basic consent mode. The contract's own fields travel as event parameters.
+- **Environments** (D-028): one web container with a `dev` GTM Environment. The local dev server loads the `dev` snippet, GitHub Pages loads Live.
+- **Consent platform** (D-029): Cookiebot's free plan, loaded through its GTM template.
+
+**Where the work happens.** Most of it is in the app repo (`jack93g/project-chinese-story-generator`): the API and the frontend. The GTM container, the GA4 property, and the Cookiebot account are set up by hand in their own UIs.
+
+**1. Accounts and containers (by hand)**
+- Create the web GTM container, with a `dev` Environment.
+- Create a GA4 property, only to get a measurement ID. Nothing is forwarded to it in the MVP.
+- Create the Cookiebot account for `huaben.app`.
   - Add `localhost` and `localhost:3000` as domain aliases, and first confirm that the free plan allows them. If it doesn't, fall back to vanilla-cookieconsent.
-  - Check that the banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
-  - Read the consent state in one small module of the frontend, which the identity cookies and the `X-Tracking-Consent` header depend on.
-  - The module follows Cookiebot's events. Cookiebot's script loads after the app starts, so a single read at startup would see no consent yet. Verify both orders: a returning visitor who already accepted gets identifiers and a `page_view` on first load, and a new visitor gets them as soon as they accept, without a reload.
-  - Set each tag's consent settings in GTM.
-- Strip query strings from `page_location` and `referrer`, keeping only allowlisted parameters, so emails and tokens in URLs aren't sent on. The allowlist is `id` on `/story` (story pages are `/story?id=…`, and without it they'd all look the same). Everything else, such as `fresh`, is dropped.
-- Verify in GTM Preview.
 
-**Note:** The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3 (D-027).
+**2. API (app repo), deployed before the frontend changes**
+- `/auth/me` returns only the username today. Make it return the user's ID too, so the frontend can set `user_id`.
+- Add `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` to the CORS allowed headers. They're only `Content-Type` and `X-API-Key` today, so a request carrying the new headers fails its preflight.
+- The API ignores the headers until TP-5, which reads and stores them.
 
-**Note:** Test in dev on the local dev server (`localhost`). GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
+**3. Frontend: load GTM**
+- Add the container's `<head>` snippet to the frontend's root layout. Leave out the `<noscript>` iframe: the app doesn't work without JavaScript, and the iframe would load regardless of consent.
+- The build chooses which snippet: the `dev` environment's on the local dev server, Live on GitHub Pages.
+- The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables. Add them to the app's `deploy-frontend.yml`.
 
-**Deliverable:** In dev, `page_view` appears in GTM Preview with every common field the frontend sets (all but `server_timestamp`) and its properties, ready for the GA4 tag. With consent denied, the behaviour matches the Phase 1 decision.
+**4. Consent**
+- In GTM, load Cookiebot with its tag template, on the Consent Initialization trigger. Review the template's permissions before adding it.
+- In the frontend, read the consent state in one small module. The identity cookies and the `X-Tracking-Consent` header depend on it.
+- The module follows Cookiebot's events. Cookiebot's script loads after the app starts, so a single read at startup would see no consent yet.
+- Until Cookiebot has reported, consent is unknown and counts as denied (D-021).
+
+**5. Identity (D-020)**
+- Generate `anonymous_id` and `session_id` in the frontend's own code, not in a GTM tag, and push them to the dataLayer. The API calls need them too, outside GTM.
+- Keep them in the cookies `huaben_anonymous_id` and `huaben_session_id`: `Path=/`, `SameSite=Lax`, and in prod `Secure` with `Domain=huaben.app`. On `localhost` they're host-only.
+- Only create them when consent is granted.
+- Send the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call, once the API change in step 2 is deployed.
+- On logout, replace `anonymous_id` and start a new session.
+- When consent is withdrawn, delete both cookies and stop sending the identity headers (D-021).
+
+**6. The dataLayer and `page_view`**
+- Implement the dataLayer interface as the tracking spec defines it: one flat object per event, with every key on every push and `undefined` for a value that's absent, so a stale `user_id` can't survive a logout.
+- `schema_version` is a constant in the frontend's tracking code, set to the contract version it was built against and changed by hand when that changes.
+- The frontend is a Next.js single-page app, so push `page_view` on every client-side route change, not only on page load.
+- The first `page_view` after a load waits for two things: Cookiebot reporting the consent state, and the session check (`/auth/me`). Without the first it would be dropped as denied, even for a returning visitor who accepted. The second makes it carry `user_id` when someone is logged in; on the login screen it's sent without one.
+- Strip query strings from `page_location` and `page_referrer`, keeping only allowlisted parameters, so emails and tokens in URLs aren't sent on. The allowlist is `id` on `/story` (story pages are `/story?id=…`, and without it they'd all look the same). Everything else, such as `fresh`, is dropped.
+
+**7. GTM: variables and the GA4 tag**
+- Add dataLayer variables for the contract's fields, and lookup variables on the hostname for the sGTM URL and the measurement ID (`localhost` → dev).
+- Build the GA4 tag for `page_view`, with the contract's own fields as event parameters.
+- Turn off the Google tag's automatic page view, and GA4's "page changes based on browser history events". The app pushes `page_view` itself, so either would count every page twice.
+- Set each tag's consent settings, so the GA4 tag is blocked until `analytics_storage` is granted.
+- The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3.
+
+**8. Verify, in GTM Preview on `localhost`**
+- `page_view` appears on first load and on every route change, with the fields in the deliverable.
+- A returning visitor who already accepted gets identifiers and a `page_view` on first load. A new visitor gets them as soon as they accept, without a reload.
+- With consent denied or not yet given: no identity cookies, no `page_view`, and `X-Tracking-Consent: denied` on API calls.
+- The banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
+- Logout replaces `anonymous_id`, and the next `page_view` has no `user_id`. Check the second in Preview's Data Layer tab: it confirms that pushing `undefined` clears a key.
+
+**Note:** GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
+
+**Deliverable:** In dev, `page_view` appears in GTM Preview with every key of the dataLayer push the tracking spec defines, ready for the GA4 tag. `source`, `consent`, and `server_timestamp` aren't among them: sGTM and Consent Mode supply those. With consent denied, no identifiers are created and no event is sent (D-021).
 
 ---
 
