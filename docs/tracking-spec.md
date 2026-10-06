@@ -70,8 +70,8 @@ Every event has these fields. They're the columns of `analytics.events`.
 | Identifier | Who creates it | Where it lives | Lifetime |
 |---|---|---|---|
 | `user_id` | The app | The login session, on the server | The account's |
-| `anonymous_id` | The frontend | A first-party cookie on `huaben.app` | 13 months from first set, not extended on later visits |
-| `session_id` | The frontend | A first-party cookie on `huaben.app` | Ends after 30 minutes without activity |
+| `anonymous_id` | The frontend | The first-party cookie `huaben_anonymous_id` on `huaben.app` | 13 months from first set, not extended on later visits |
+| `session_id` | The frontend | The first-party cookie `huaben_session_id` on `huaben.app` | Ends after 30 minutes without activity |
 
 - `user_id` is the user's ID in the app's database, sent as a string. A username or email address is never sent.
 - The frontend only creates `anonymous_id` and `session_id` when analytics consent is granted.
@@ -110,6 +110,32 @@ This section hasn't been reviewed by a lawyer.
 - Nothing is forwarded to a third party (GA4, Meta) unless the event's consent state is `granted`.
 - Withdrawing consent deletes both cookies and stops the identity headers.
 - **A worker event uses the consent state from when the request was made.** It's stored with the request, together with the identifiers. Withdrawing or granting consent while a story is being generated doesn't change that story's event.
+
+## The frontend's dataLayer
+
+The frontend pushes each event to GTM's dataLayer as one flat object:
+
+```js
+window.dataLayer.push({
+  event: "page_view",
+  event_id: "<uuid v4>",
+  schema_version: "1.0.0",
+  event_timestamp: "2026-10-04T09:30:00.123Z",
+  user_id: "42",              // undefined when nobody is logged in
+  anonymous_id: "<uuid v4>",
+  session_id: "<uuid v4>",
+  page_location: "https://huaben.app/story?id=12",
+  page_path: "/story",
+  page_title: "…",
+  page_referrer: "https://huaben.app/stories",   // undefined when there is none
+});
+```
+
+- The keys are the contract's common fields and the event's properties, side by side.
+- **Every push carries every key, with `undefined` for a value that's absent.** GTM merges pushes into one model, so a key left out would keep its previous value: after a logout, the next `page_view` would still carry the old `user_id`.
+- `source` and `consent` aren't pushed. sGTM sets `source` on the browser path, and consent comes from Consent Mode.
+- `page_referrer` is `document.referrer` on first load and the previous page's URL on a route change, stripped the same way as `page_location`.
+- Nothing is pushed without analytics consent.
 
 ## Sending frontend events to sGTM (D-027)
 

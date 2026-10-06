@@ -174,7 +174,8 @@ Recommendation: one container per environment.
 - The API ignores the headers until TP-5, which reads and stores them.
 
 **3. Frontend: load GTM**
-- Add the container's snippet to the frontend. The build chooses which one: the `dev` environment's on the local dev server, Live on GitHub Pages.
+- Add the container's `<head>` snippet to the frontend's root layout. Leave out the `<noscript>` iframe: the app doesn't work without JavaScript, and the iframe would load regardless of consent.
+- The build chooses which snippet: the `dev` environment's on the local dev server, Live on GitHub Pages.
 - The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables. Add them to the app's `deploy-frontend.yml`.
 
 **4. Consent**
@@ -185,13 +186,14 @@ Recommendation: one container per environment.
 
 **5. Identity (D-020)**
 - Generate `anonymous_id` and `session_id` in the frontend's own code, not in a GTM tag, and push them to the dataLayer. The API calls need them too, outside GTM.
+- Keep them in the cookies `huaben_anonymous_id` and `huaben_session_id`: `Path=/`, `SameSite=Lax`, and in prod `Secure` with `Domain=huaben.app`. On `localhost` they're host-only.
 - Only create them when consent is granted.
 - Send the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call, once the API change in step 2 is deployed.
 - On logout, replace `anonymous_id` and start a new session.
 - When consent is withdrawn, delete both cookies and stop sending the identity headers (D-021).
 
 **6. The dataLayer and `page_view`**
-- Implement the dataLayer interface, with every common field the frontend sets.
+- Implement the dataLayer interface as the tracking spec defines it: one flat object per event, with every key on every push and `undefined` for a value that's absent, so a stale `user_id` can't survive a logout.
 - `schema_version` is a constant in the frontend's tracking code, set to the contract version it was built against and changed by hand when that changes.
 - The frontend is a Next.js single-page app, so push `page_view` on every client-side route change, not only on page load.
 - The first `page_view` after a load waits for the session check (`/auth/me`), so it carries `user_id` when someone is logged in. On the login screen it's sent without one.
@@ -200,6 +202,7 @@ Recommendation: one container per environment.
 **7. GTM: variables and the GA4 tag**
 - Add dataLayer variables for the contract's fields, and lookup variables on the hostname for the sGTM URL and the measurement ID (`localhost` → dev).
 - Build the GA4 tag for `page_view`, with the contract's own fields as event parameters.
+- Turn off the Google tag's automatic page view, and GA4's "page changes based on browser history events". The app pushes `page_view` itself, so either would count every page twice.
 - Set each tag's consent settings, so the GA4 tag is blocked until `analytics_storage` is granted.
 - The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3.
 
