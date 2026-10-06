@@ -196,7 +196,7 @@ Recommendation: one container per environment.
 - Implement the dataLayer interface as the tracking spec defines it: one flat object per event, with every key on every push and `undefined` for a value that's absent, so a stale `user_id` can't survive a logout.
 - `schema_version` is a constant in the frontend's tracking code, set to the contract version it was built against and changed by hand when that changes.
 - The frontend is a Next.js single-page app, so push `page_view` on every client-side route change, not only on page load.
-- The first `page_view` after a load waits for the session check (`/auth/me`), so it carries `user_id` when someone is logged in. On the login screen it's sent without one.
+- The first `page_view` after a load waits for two things: Cookiebot reporting the consent state, and the session check (`/auth/me`). Without the first it would be dropped as denied, even for a returning visitor who accepted. The second makes it carry `user_id` when someone is logged in; on the login screen it's sent without one.
 - Strip query strings from `page_location` and `page_referrer`, keeping only allowlisted parameters, so emails and tokens in URLs aren't sent on. The allowlist is `id` on `/story` (story pages are `/story?id=…`, and without it they'd all look the same). Everything else, such as `fresh`, is dropped.
 
 **7. GTM: variables and the GA4 tag**
@@ -211,7 +211,7 @@ Recommendation: one container per environment.
 - A returning visitor who already accepted gets identifiers and a `page_view` on first load. A new visitor gets them as soon as they accept, without a reload.
 - With consent denied or not yet given: no identity cookies, no `page_view`, and `X-Tracking-Consent: denied` on API calls.
 - The banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
-- Logout replaces `anonymous_id`.
+- Logout replaces `anonymous_id`, and the next `page_view` has no `user_id`. Check the second in Preview's Data Layer tab: it confirms that pushing `undefined` clears a key.
 
 **Note:** GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
 

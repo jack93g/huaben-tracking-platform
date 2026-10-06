@@ -131,9 +131,11 @@ window.dataLayer.push({
 });
 ```
 
-- The keys are the contract's common fields and the event's properties, side by side.
+- The keys are the contract's common fields and the event's properties, side by side, with three differences:
+  - `event` is GTM's own key, the one triggers listen for. It carries the contract's `event_name`.
+  - `source` and `consent` aren't pushed. sGTM sets `source` on the browser path, and consent comes from Consent Mode.
+  - `server_timestamp` isn't pushed. sGTM sets it.
 - **Every push carries every key, with `undefined` for a value that's absent.** GTM merges pushes into one model, so a key left out would keep its previous value: after a logout, the next `page_view` would still carry the old `user_id`.
-- `source` and `consent` aren't pushed. sGTM sets `source` on the browser path, and consent comes from Consent Mode.
 - `page_referrer` is `document.referrer` on first load and the previous page's URL on a route change, stripped the same way as `page_location`.
 - Nothing is pushed without analytics consent.
 
