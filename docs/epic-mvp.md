@@ -215,7 +215,7 @@ Recommendation: one container per environment.
 
 **Note:** GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
 
-**Deliverable:** In dev, `page_view` appears in GTM Preview with every common field the frontend sets (all but `server_timestamp`) and its properties, ready for the GA4 tag. With consent denied, no identifiers are created and no event is sent (D-021).
+**Deliverable:** In dev, `page_view` appears in GTM Preview with every key of the dataLayer push the tracking spec defines, ready for the GA4 tag. `source`, `consent`, and `server_timestamp` aren't among them: sGTM and Consent Mode supply those. With consent denied, no identifiers are created and no event is sent (D-021).
 
 ---
 

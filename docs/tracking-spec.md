@@ -52,6 +52,8 @@ Every event has these fields. They're the columns of `analytics.events`.
 | `consent` | record | yes | source | The Consent Mode v2 signals when the event happened |
 | `properties` | JSON | yes | source | The event's own properties. `{}` when it has none |
 
+**Frontend events.** The frontend doesn't send `source` or `consent` itself. On the browser's path sGTM sets `source` to `frontend` and builds `consent` from the request's Consent Mode state (D-027). See [The frontend's dataLayer](#the-frontends-datalayer).
+
 **Timestamps**
 - `event_timestamp` is the business time: the moment the thing the event describes became true. Each event defines which moment that is, in the table above and in the contract's `event_time`.
 - It's set once, when the event is created. Retries and delayed delivery never change it.
@@ -77,6 +79,7 @@ Every event has these fields. They're the columns of `analytics.events`.
 - The frontend only creates `anonymous_id` and `session_id` when analytics consent is granted.
 - **An event with no identifiers at all is valid.** A story generated through the shared API key has no user and no browser, so all three are null. It still counts in totals; it just can't be attributed.
 - **Logout** replaces `anonymous_id` and starts a new session, so the next person on a shared device doesn't inherit the previous one's history.
+- **Cookie attributes.** Both cookies are set with `Path=/` and `SameSite=Lax`. In prod they also have `Secure` and `Domain=huaben.app`, so `www.huaben.app` shares them. On `localhost` they're host-only. They can't be `HttpOnly`, because the frontend's code reads them.
 
 **Reaching the API.** The frontend adds three headers to every API call:
 
