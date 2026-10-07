@@ -141,7 +141,7 @@ Recommendation: one container per environment.
 - **Identity** (D-020):
   - `user_id` is the app's user ID as a string.
   - The frontend generates `anonymous_id` and `session_id`, keeps them in first-party cookies, and sends them to the API in request headers.
-  - Logout replaces `anonymous_id`.
+  - Logout clears `user_id` and keeps `anonymous_id` (amended 2026-10-06; it first replaced it).
   - dbt backfills `user_id` onto earlier anonymous events on the same `anonymous_id`, within 30 days.
 - **Consent** (D-021, not legally reviewed): with consent denied the frontend sends nothing and sets no identifiers. Backend events are still sent, with `user_id` but no device identifiers.
 - **Retention** (D-022): 14 months for raw events and event-level models, 30 days for rejected events and logs, 7 days for sent outbox rows.
@@ -176,7 +176,8 @@ Recommendation: one container per environment.
 **3. Frontend: load GTM**
 - Add the container's `<head>` snippet to the frontend's root layout. Leave out the `<noscript>` iframe: the app doesn't work without JavaScript, and the iframe would load regardless of consent.
 - The build chooses which snippet: the `dev` environment's on the local dev server, Live on GitHub Pages.
-- The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables. Add them to the app's `deploy-frontend.yml`.
+- The frontend is a static export, so the container ID and the environment's snippet parameters are `NEXT_PUBLIC_…` build variables, set in the frontend's local environment file.
+- Don't add the container ID to the app's `deploy-frontend.yml` in this ticket. That makes the real site load the Live container, so it's the go-live switch: a change of its own, made once the Live version in GTM is checked, the GA4 tag is absent or paused, and the privacy notice exists.
 
 **4. Consent**
 - In GTM, load Cookiebot with its tag template, on the Consent Initialization trigger. Review the template's permissions before adding it.
@@ -189,7 +190,7 @@ Recommendation: one container per environment.
 - Keep them in the cookies `huaben_anonymous_id` and `huaben_session_id`: `Path=/`, `SameSite=Lax`, and in prod `Secure` with `Domain=huaben.app`. On `localhost` they're host-only.
 - Only create them when consent is granted.
 - Send the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call, once the API change in step 2 is deployed.
-- On logout, replace `anonymous_id` and start a new session.
+- On logout, leave both cookies alone. Only `user_id` is cleared (D-020, as amended).
 - When consent is withdrawn, delete both cookies and stop sending the identity headers (D-021).
 
 **6. The dataLayer and `page_view`**
@@ -211,7 +212,7 @@ Recommendation: one container per environment.
 - A returning visitor who already accepted gets identifiers and a `page_view` on first load. A new visitor gets them as soon as they accept, without a reload.
 - With consent denied or not yet given: no identity cookies, no `page_view`, and `X-Tracking-Consent: denied` on API calls.
 - The banner doesn't flash and disappear on first load. Cookiebot's guide for Next.js warns of this when its script loads after the page hydrates. If it does, load the script in the frontend's root layout instead and amend D-029.
-- Logout replaces `anonymous_id`, and the next `page_view` has no `user_id`. Check the second in Preview's Data Layer tab: it confirms that pushing `undefined` clears a key.
+- After a logout, `anonymous_id` and `session_id` are unchanged and the next `page_view` has no `user_id`. Check the second in Preview's Data Layer tab: it confirms that pushing `undefined` clears a key.
 
 **Note:** GitHub Pages only serves prod, so the first time the setup runs on the real site is in prod. Keep the prod GTM publish separate from the frontend deploy, so either can be rolled back on its own.
 
@@ -290,7 +291,7 @@ Recommendation: one container per environment.
 
 - **sGTM side:** implement the custom client (D-024). It checks the shared-secret header against the SHA-256 hash stored in the container.
 - Define a small tracking module in FastAPI, using the Pydantic models generated from the contract.
-- Read `anonymous_id`, `session_id`, and consent state from the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` request headers (D-020). Drop values that aren't UUIDs. The frontend already sends the headers, and CORS already allows them (TP-2).
+- Read `anonymous_id`, `session_id`, and consent state from the `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` request headers (D-020). Drop values that aren't UUIDs. The frontend already sends the headers, and CORS already allows them (TP-2). The first API call of each page load, the session check, always says `denied`, because it runs before the consent state is known; record nothing from it.
 - **App change:** `story_generation_requests` has no `user_id` today. Add it, and record the requesting user when a generation is created.
 - Generate authoritative business events: `story_generated` for the MVP, then `login` and `quiz_submitted`, which the contract already defines. The app has no sign-up or "add vocabulary" action today; `sign_up` is added if the app gains one (D-017).
 - Add `event_id` and `event_timestamp` once, when the outbox row is written. For `story_generated`, `event_timestamp` is the request's `completed_at` (D-026). Retries never change either. `server_timestamp` is set by sGTM.

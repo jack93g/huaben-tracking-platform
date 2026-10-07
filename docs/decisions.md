@@ -219,6 +219,7 @@ This repository is public, so entries leave out individual account names, organi
   - `contract/events.yaml` is the single source. `scripts/generate_contract.py` generates the BigQuery schema, the dbt source tests, and the backend's Pydantic models from it. The generated files are committed.
   - A pre-commit hook runs the generator with `--check`, so the existing `pre-commit` required check fails when the generated files are out of date.
   - The contract has one semantic version, carried by every event as `schema_version`: minor for additive changes, major for breaking ones.
+    - *Amended 2026-10-06.* The first version named only minor and major. A change to wording only, which alters no field, now bumps the patch version, so that a description can be corrected without implying a new field. The first use is 1.0.1, which says that `page_location` also loses its fragment. A sender built against an earlier patch version stays valid.
   - The app installs the Pydantic models as a uv git dependency, pinned to a `contract-v<version>` tag of this repository.
 - **Why:**
   - YAML with a small generator is easy to read and gives full control of the output. JSON Schema is a standard but verbose, and would still need custom code for BigQuery and dbt. Pydantic as the source would hide the contract inside Python.
@@ -248,18 +249,21 @@ This repository is public, so entries leave out individual account names, organi
   - **`user_id`** is the user's ID in the app's database, as a string. Usernames and email addresses are never sent.
   - **`anonymous_id`** is a UUID the frontend generates and keeps in a first-party cookie on `huaben.app`, for 13 months from first set.
   - **`session_id`** is a UUID the frontend generates, ending after 30 minutes without activity.
+    - *Amended 2026-10-06.* "Activity" wasn't defined. As built, every `page_view` and every API call renews the session, including a page polling in the background. That's accepted: the app's polling is short, and changing it would mean another change to the app.
   - **Propagation:** the frontend sends `X-Anonymous-Id`, `X-Session-Id`, and `X-Tracking-Consent` headers with every API call. The API treats them as untrusted and drops anything that isn't a UUID. `user_id` always comes from the login session.
-  - **Logout** replaces `anonymous_id` and starts a new session.
+  - **Logout** clears `user_id` and nothing else. `anonymous_id` and the session carry on.
+    - *Amended 2026-10-06.* The first version replaced `anonymous_id` and started a new session at logout, so that nothing after a logout linked back to the account. A typical shop keeps the browser's ID across logout, and this project follows the common setup. Replacing it also broke the link for someone logging out and back in on their own device. The shared-device case is still covered by the stitching rule, which never applies an earlier `user_id`.
   - **Stitching, applied by dbt:** an event keeps its own `user_id`. An event without one gets the first `user_id` seen after it on the same `anonymous_id`, within 30 days, and never an earlier one.
 - **Why:**
   - The app's ID already exists and joins straight to app data. The column is a string, so a random analytics ID could replace it later without a schema change.
   - A cookie is shared between `huaben.app` and `www.huaben.app`; `localStorage` isn't. A cookie set by sGTM would gain nothing, because Safari caps it at 7 days when the tracking domain's IP differs from the site's.
   - Headers are explicit and work the same in every environment. Reading the cookie in the API would depend on the API staying under `huaben.app`.
-  - Rotating on logout stops the next person on a shared device inheriting the previous one's history. The "never an earlier one" rule does the same when a session expires without a logout.
+  - The "never an earlier one" rule stops the next person on a shared device inheriting the previous one's history, whether the previous person logged out or their session just expired.
 - **Consequences:**
   - The app must add the three headers to its CORS allowed headers, return the user's ID from `/auth/me`, and store `user_id` and the identity context on each generation request (TP-2, TP-5).
   - Safari limits script-set cookies to 7 days, so a logged-out Safari visitor gets a new `anonymous_id` after a week away. Login re-links them.
   - User IDs are sequential database keys. They must be replaced or hashed before being forwarded to a third party.
+  - One `anonymous_id` can belong to several users over time, on a shared device. Events between a logout and the next login are stitched to whoever logs in next.
   - The stitching rules live in dbt, so they can change without losing data.
 
 ### D-021: Consent
@@ -385,7 +389,8 @@ This repository is public, so entries leave out individual account names, organi
   - Using Preview mode alone, without Environments, would leave no step between a draft and Live.
 - **Consequences:**
   - Dev and prod share a container, so a version can be published to Live by mistake. The export job (D-010) turns every Live change into a PR diff.
-  - The frontend build chooses the snippet: the environment's snippet carries `gtm_auth` and `gtm_preview` parameters, which aren't secrets.
+  - The frontend build chooses the snippet: the environment's snippet carries `gtm_auth` and `gtm_preview` parameters.
+    - *Amended 2026-10-06.* This first said neither parameter is a secret. `gtm_preview` isn't, but `gtm_auth` lets anyone load the `dev` environment's unpublished tags, and it only ever appears on `localhost`. It stays out of both repositories, in the frontend's local environment file. If it leaks, GTM's "Reset Link" on the environment replaces it.
   - Web and server GTM are promoted differently if the server containers are split per environment (TP-3's decision).
 
 ### D-029: Cookiebot is the consent management platform, loaded through GTM
@@ -398,6 +403,10 @@ This repository is public, so entries leave out individual account names, organi
   - The template sets the Consent Mode v2 defaults and updates (D-021). Every other tag is gated by its consent settings in GTM.
   - The frontend reads the consent state from Cookiebot, behind one small module. That module decides whether the identity cookies exist and what `X-Tracking-Consent` says (D-020).
   - The module follows Cookiebot's events, not a single read at startup. Until Cookiebot has reported, consent is unknown and counts as denied. When it reports or changes to granted, the module creates the identifiers, starts the headers, and sends the `page_view` for the page being shown. When it changes to denied, it deletes the cookies and stops the headers.
+    - *Amended 2026-10-06*, after the frontend was built. Three details this didn't state:
+      - Granted means Cookiebot's Statistics category alone, the one its tag maps to `analytics_storage`.
+      - The module tells "denied" from "not known yet". Both read as denied to the rest of the code, but the cookies are deleted only once Cookiebot has reported a refusal. Every page load starts as unknown, so deleting on unknown would remove a returning visitor's `anonymous_id`.
+      - It listens for Cookiebot's `CookiebotOnConsentReady` event, and also reads the state once when first used, because the event can fire before the listener is attached.
   - `localhost` and `localhost:3000` are added as domain aliases, so the banner runs on the local dev server.
 - **Why:**
   - Cookiebot through its GTM template is the setup most likely to be met in an e-commerce shop, which is what this project is practice for. Consent is configured in one place, GTM, and a change to it is a publish, promoted through the same Environments as the tags (D-028).
@@ -406,11 +415,13 @@ This repository is public, so entries leave out individual account names, organi
   - Loading the script in the frontend's root layout, as Cookiebot's guide for Next.js describes, would move the consent setup out of GTM and into the app's code.
 - **Consequences:**
   - Cookiebot's guide for Next.js says the banner can flash and disappear when its script loads after the page hydrates, which a script loaded by GTM does. TP-2 tests for this. If it happens, the script moves to the root layout, recorded as an amendment here.
+    - *Tested 2026-10-06.* In the app on `localhost`, the banner appears and stays. Cookiebot stays in GTM.
   - The template comes from GTM's Community Template Gallery, so its permissions are reviewed before it's added.
   - A third party's script loads on every page, and Cookiebot sets its own cookie. The privacy notice must name it.
   - If the script is blocked, e.g. by an ad blocker, there's no banner and consent stays unknown, which counts as denied (D-021).
   - The free plan covers one domain and 50 subpages. Its cookie scanner only sees the login page, so the cookie declaration needs checking by hand.
   - TP-2 confirms that the free plan allows the `localhost` alias. If it doesn't, the fallback is vanilla-cookieconsent, and only the consent module and the way the banner loads would change.
+    - *Confirmed 2026-10-06.* The free plan accepts `localhost` and `localhost:3000` as aliases.
 
 ## Open
 

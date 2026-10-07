@@ -1,6 +1,6 @@
 # Tracking specification
 
-**Contract version 1.0.0**
+**Contract version 1.0.1**
 
 This document describes what Huaben tracks and how. The machine-readable version is [contract/events.yaml](../contract/events.yaml): where the two disagree, the contract is right and this document needs fixing. The reasons behind each rule are in [decisions.md](decisions.md), D-017 to D-026.
 
@@ -65,6 +65,7 @@ Every event has these fields. They're the columns of `analytics.events`.
 
 **Consent record**
 - `analytics_storage` is always present: `granted` or `denied`. Unknown counts as `denied`.
+- In the frontend, granted means the visitor accepted Cookiebot's Statistics category, the one its tag maps to `analytics_storage`. The Marketing and Preferences categories don't affect it.
 - `ad_storage`, `ad_user_data`, and `ad_personalization` are null until a tag needs them.
 
 ## Identity (D-020)
@@ -73,12 +74,12 @@ Every event has these fields. They're the columns of `analytics.events`.
 |---|---|---|---|
 | `user_id` | The app | The login session, on the server | The account's |
 | `anonymous_id` | The frontend | The first-party cookie `huaben_anonymous_id` on `huaben.app` | 13 months from first set, not extended on later visits |
-| `session_id` | The frontend | The first-party cookie `huaben_session_id` on `huaben.app` | Ends after 30 minutes without activity |
+| `session_id` | The frontend | The first-party cookie `huaben_session_id` on `huaben.app` | Ends after 30 minutes without activity. Every `page_view` and every API call counts as activity, including a page polling in the background |
 
 - `user_id` is the user's ID in the app's database, sent as a string. A username or email address is never sent.
 - The frontend only creates `anonymous_id` and `session_id` when analytics consent is granted.
 - **An event with no identifiers at all is valid.** A story generated through the shared API key has no user and no browser, so all three are null. It still counts in totals; it just can't be attributed.
-- **Logout** replaces `anonymous_id` and starts a new session, so the next person on a shared device doesn't inherit the previous one's history.
+- **Logout** clears `user_id` and nothing else. `anonymous_id` and the session carry on, as in a typical shop. The next person on a shared device doesn't inherit the previous one's history, because stitching never applies an earlier `user_id`.
 - **Cookie attributes.** Both cookies are set with `Path=/` and `SameSite=Lax`. In prod they also have `Secure` and `Domain=huaben.app`, so `www.huaben.app` shares them. On `localhost` they're host-only. They can't be `HttpOnly`, because the frontend's code reads them.
 
 **Reaching the API.** The frontend adds three headers to every API call:
@@ -91,6 +92,7 @@ Every event has these fields. They're the columns of `analytics.events`.
 
 - The API treats the headers as untrusted. A value that isn't a UUID v4 is dropped.
 - A missing `X-Tracking-Consent` header means `denied`.
+- **The first API call of each page load says `denied`.** The session check (`/auth/me`) runs before Cookiebot has reported, so it carries no identifiers, even for a visitor who accepted earlier. Later calls carry the real state. Nothing should be recorded from that call.
 - `user_id` always comes from the login session, never from a header.
 - An event produced later by the worker uses the values captured when the request was made. They're stored with the request.
 
@@ -98,6 +100,7 @@ Every event has these fields. They're the columns of `analytics.events`.
 - An event with its own `user_id` keeps it.
 - An event without one gets the first `user_id` seen *after* it on the same `anonymous_id`, if that's within 30 days. It never gets an earlier one.
 - One user on several devices: every `anonymous_id` maps to that user.
+- One device shared by several users: its `anonymous_id` maps to each of them in turn. Events between a logout and the next login go to whoever logs in next.
 
 ## Consent (D-021)
 
@@ -140,7 +143,27 @@ window.dataLayer.push({
   - `server_timestamp` isn't pushed. sGTM sets it.
 - **Every push carries every key, with `undefined` for a value that's absent.** GTM merges pushes into one model, so a key left out would keep its previous value: after a logout, the next `page_view` would still carry the old `user_id`.
 - `page_referrer` is `document.referrer` on first load and the previous page's URL on a route change, stripped the same way as `page_location`.
-- Nothing is pushed without analytics consent.
+- No event is pushed without analytics consent.
+
+**Details of `page_view`**
+- One `page_view` per page shown, where a page is its tracked URL. `/story?id=12&fresh=1` becoming `/story?id=12` is the same page.
+- `page_location` and `page_referrer` lose their fragment and every query parameter that isn't allowlisted. The allowlist is `id` on `/story`, and it only applies to the app's own origin: another site's referrer loses its whole query string.
+- `event_id` and `event_timestamp` are fixed when the page is shown. The identifiers and the title are read when the push is made, which can be a moment later.
+- The first push after a load waits for Cookiebot's consent report and for the session check.
+- `page_title` can be `undefined`. On a route change Next.js removes the title and adds it back a moment later. The push waits for it for up to one second, then goes without.
+- If the visitor navigates while a `page_view` is waiting, it's sent first, without a title. If consent is withdrawn while it waits, it's dropped.
+- Logging in or out sends no `page_view`, because the URL doesn't change. The next one comes with the next navigation.
+- Consent withdrawn and granted again on the same page sends a second `page_view` for it, with the new identifiers.
+
+**Pushes that aren't events.** Two pushes have no `event` key, so they fire no trigger. They exist because GTM keeps a value until a later push replaces it, and neither a logout nor a withdrawal changes the page, so no `page_view` follows to do that.
+
+| When | Push |
+|---|---|
+| Nobody is logged in any more: a logout, or the login expiring | `{ user_id: undefined }` |
+| Consent is withdrawn | `{ user_id: undefined, anonymous_id: undefined, session_id: undefined }` |
+
+- Each is pushed once, and only if a `page_view` put those values in the dataLayer during this page load.
+- The first is pushed whatever the consent state, since it carries no data.
 
 ## Sending frontend events to sGTM (D-027)
 
@@ -199,7 +222,8 @@ A user's data can also be erased on request, by deleting their rows by `user_id`
 
 1. Edit `contract/events.yaml` and bump `version`:
    - **minor** for an additive change, such as a new event or a new optional property;
-   - **major** for a breaking change, such as removing or renaming a property, or making one required.
+   - **major** for a breaking change, such as removing or renaming a property, or making one required;
+   - **patch** for a change to wording only, which alters no field. Senders built against the earlier patch version stay valid.
 2. Run `python scripts/generate_contract.py` and commit the generated files with the change. The `pre-commit` check fails if they're out of date.
 3. Update this document.
 4. After merging, tag the commit `contract-v<version>`. The app pins that tag to install the Pydantic models (see [contract/python/README.md](../contract/python/README.md)).
