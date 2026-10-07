@@ -7,7 +7,7 @@ sources:
   schema: analytics
   tables:
   - name: events
-    description: One row per received event, contract version 1.0.0. Delivery is at-least-once, so event_id is not unique here.
+    description: One row per received event, contract version 1.0.1. Delivery is at-least-once, so event_id is not unique here.
     columns:
     - name: event_id
       description: UUID v4 generated once where the event happens. Retries reuse it, so it is the deduplication key.

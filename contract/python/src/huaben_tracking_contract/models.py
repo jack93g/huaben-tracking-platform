@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from pydantic import UUID4, AwareDatetime, BaseModel, ConfigDict, Field
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.0.1"
 
 
 class _Model(BaseModel):
@@ -46,7 +46,7 @@ class StoryGenerated(_Model):
 
     event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["story_generated"] = "story_generated"
-    schema_version: Literal["1.0.0"] = SCHEMA_VERSION
+    schema_version: Literal["1.0.1"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the generation completed, the same value as the request's completed_at in the app. Not when it was requested or delivered.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")
@@ -67,7 +67,7 @@ class Login(_Model):
 
     event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["login"] = "login"
-    schema_version: Literal["1.0.0"] = SCHEMA_VERSION
+    schema_version: Literal["1.0.1"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the login succeeded.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")
@@ -91,7 +91,7 @@ class QuizSubmitted(_Model):
 
     event_id: UUID4 = Field(default_factory=uuid4)
     event_name: Literal["quiz_submitted"] = "quiz_submitted"
-    schema_version: Literal["1.0.0"] = SCHEMA_VERSION
+    schema_version: Literal["1.0.1"] = SCHEMA_VERSION
     source: Literal["backend"] = "backend"
     event_timestamp: AwareDatetime = Field(description="When the quiz attempt was saved.")
     user_id: str | None = Field(default=None, description="The app's user ID as a string. Null when nobody is logged in.")

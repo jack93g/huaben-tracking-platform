@@ -1,7 +1,7 @@
 # Generated from contract/events.yaml by scripts/generate_contract.py. Do not edit.
 [project]
 name = "huaben-tracking-contract"
-version = "1.0.0"
+version = "1.0.1"
 description = "Pydantic models for the Huaben tracking contract's backend events."
 requires-python = ">=3.11"
 dependencies = ["pydantic>=2.7,<3"]

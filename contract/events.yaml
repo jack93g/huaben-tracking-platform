@@ -6,7 +6,8 @@
 
 # Semantic version of the contract. Every event carries it as `schema_version`.
 # Additive changes bump the minor version; breaking changes bump the major one.
-version: 1.0.0
+# A change to wording only, which alters no field, bumps the patch version.
+version: 1.0.1
 
 # Columns of `analytics.events`, in order. Changes here must be additive:
 # Terraform replaces the table, and loses its data, on any other schema change.
@@ -108,7 +109,7 @@ events:
       page_location:
         type: string
         required: true
-        description: Full URL of the page, with the query string stripped except for allowlisted parameters.
+        description: Full URL of the page, without its fragment, and with the query string stripped except for allowlisted parameters.
       page_path:
         type: string
         required: true
@@ -120,7 +121,7 @@ events:
       page_referrer:
         type: string
         required: false
-        description: URL of the previous page, stripped the same way as page_location.
+        description: URL of the previous page, stripped the same way as page_location. Another site's URL loses its whole query string.
 
   story_generated:
     source: backend
