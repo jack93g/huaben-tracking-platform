@@ -10,7 +10,7 @@ Frontend ── page_view ────────┐
 Backend ── story_generated ─► sGTM ─► analytics.events ─► dbt ─► fct_events
 ```
 
-The plan is in [docs/epic-mvp.md](docs/epic-mvp.md), and the reasoning behind it is in [docs/decisions.md](docs/decisions.md). What's tracked, and how, is in [docs/tracking-spec.md](docs/tracking-spec.md).
+The overview of the plan is in [docs/epic-mvp.md](docs/epic-mvp.md), the tickets are [GitHub issues](https://github.com/jack93g/huaben-tracking-platform/issues), and the reasoning is in [docs/decisions.md](docs/decisions.md). What's tracked, and how, is in [docs/tracking-spec.md](docs/tracking-spec.md).
 
 ## Repository layout
 
