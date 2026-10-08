@@ -16,7 +16,7 @@ Frontend ── page_view ────────┐
 Backend ── story_generated ─► sGTM ─► analytics.events ─► dbt ─► fct_events
 ```
 
-- **Plan:** [docs/epic-mvp.md](docs/epic-mvp.md) is the source of truth. Tickets `TP-0` to `TP-8` are sub-issues of the epic (issue #1), on the "Chinese Story Generator" project board.
+- **Plan:** [docs/epic-mvp.md](docs/epic-mvp.md) is the overview: hosting context, environments, and the MVP boundary. The tickets, `TP-0` to `TP-8`, are GitHub issues: sub-issues of the epic (issue #1), on the "Chinese Story Generator" project board. Each issue is the source of truth for its ticket's text (D-030).
 - **Reasoning:** [docs/decisions.md](docs/decisions.md) records the decisions and why they were made.
 - **Tracking spec:** [docs/tracking-spec.md](docs/tracking-spec.md) describes the events, identity, and consent rules. Keep it in step with `contract/events.yaml`.
 
@@ -111,5 +111,9 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 - Record decisions in `docs/decisions.md`: add an entry with an ID and move it from **Open** to **Accepted**. Entries are superseded, never deleted.
   - A correction to a decision's details (e.g. its role list) is a dated *Amended* note in the same entry, saying what it was before and why it changed.
   - A reversal of the decision itself gets a new entry that supersedes the old one, and the old one is marked *Superseded by D-NNN*.
-- `docs/epic-mvp.md` holds the full text of every ticket. When it changes, update the matching GitHub issue body to match.
+- Ticket text lives in the GitHub issues, not in the repo (D-030). Read a ticket with `gh issue view <number>` and edit it on the issue. Don't copy ticket text into `docs/`.
+  - Editing an issue publishes it. Ask before changing a ticket's text, and check it against the rules for this public repo first.
+  - Record a ticket's progress by editing the issue's text (what was decided, what's done, what's left), not in comments.
+  - The epic's issue (#1) only points to `docs/epic-mvp.md`. The overview is changed there, through a pull request.
+  - Anything that must outlive a ticket goes in `docs/decisions.md` or `docs/tracking-spec.md`.
 - The user treats this project as a way to learn. For decisions, lay out the options and trade-offs, give a recommendation, and let them choose. Don't pick silently, and don't treat an open decision as settled.

@@ -425,6 +425,25 @@ This repository is public, so entries leave out individual account names, organi
   - TP-2 confirms that the free plan allows the `localhost` alias. If it doesn't, the fallback is vanilla-cookieconsent, and only the consent module and the way the banner loads would change.
     - *Confirmed 2026-10-06.* The free plan accepts `localhost` and `localhost:3000` as aliases.
 
+### D-030: Ticket text lives in the GitHub issues, not in the repository
+
+*Accepted 2026-10-08 · Epic*
+
+- **Decision:**
+  - Each ticket's text is kept in its GitHub issue and nowhere else. The issue is edited directly.
+  - A ticket's progress is recorded the same way, by editing the issue's text: what was decided, what's done, and what's left. It isn't kept in comments, so the issue always reads as the ticket's current state.
+  - The epic's issue holds no overview of its own. It points to `docs/epic-mvp.md` and lists its tickets as sub-issues.
+  - `docs/epic-mvp.md` keeps only what isn't a ticket: the hosting context, the environments, the MVP boundary, and a list of the tickets with links.
+  - Decisions stay in this file, and the tracking specification stays in `docs/tracking-spec.md`. A ticket refers to them; it doesn't repeat them.
+- **Why:**
+  - Until now the epic document held every ticket's text and each issue was kept matching it, so every ticket edit was made twice: once through a pull request, once on the issue. During TP-2 the two drifted several times, and the board, which is where the work is followed, ran ahead of `main`.
+  - Keeping the text in the repository gave ticket edits a review and one file to read. Neither was worth the double work for a one-person project.
+- **Consequences:**
+  - Ticket edits aren't reviewed in a pull request. GitHub keeps each issue's edit history.
+  - This repository is public and so are its issues, so the rules for what may be written apply to issue text as before.
+  - Anything that has to outlive a ticket goes in a decision or in the specification, not only in the issue. A closed issue is history.
+  - The ticket sections removed from `docs/epic-mvp.md` matched their issues when they were removed, so no text was lost.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
