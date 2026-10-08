@@ -202,7 +202,7 @@ Recommendation: one container per environment.
 
 **7. GTM: variables and the GA4 tag**
 - Add dataLayer variables for the contract's fields, and lookup variables on the hostname for the sGTM URL and the measurement ID (`localhost` → dev).
-- Build the GA4 tag for `page_view`, with the contract's own fields as event parameters.
+- Build the GA4 tag for `page_view`, with the contract's own fields as event parameters. `session_id` is sent as `app_session_id`, so that Google's tag doesn't take it as its own session ID (D-027). Set `page_location`, `page_title`, and `page_referrer` from the dataLayer too, or the tag reads them from the real URL.
 - Turn off the Google tag's automatic page view, and GA4's "page changes based on browser history events". The app pushes `page_view` itself, so either would count every page twice.
 - Set each tag's consent settings, so the GA4 tag is blocked until `analytics_storage` is granted.
 - The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3.
@@ -263,6 +263,8 @@ Recommendation: one container per environment.
 - Give the sGTM service account write access to the `analytics` dataset only.
 - Build the sGTM → BigQuery tag. sGTM has no built-in BigQuery tag, so this is a custom template using the `BigQuery.insert` sandbox API. Map events to the schema.
 - Map browser events to the contract's row first (D-027). They arrive through the GA4 client in GA4's shape, while backend events arrive already in the contract's shape. On the browser path, always set `source` to `frontend` and refuse the names of backend events, because that path takes no secret.
+  - Read each field from where the tracking spec says it travels: `session_id` arrives as `app_session_id`, and `event_id` and `user_id` under Google's own keys. TP-3 confirms the names they have once sGTM has parsed the request.
+  - Copy only the contract's fields. The request also carries Google's client ID, the region, screen size, language, and browser and operating system versions, none of which is stored.
 - On insert failure, the tag calls `logToConsole` with the `event_id` and the error, so that Phase 8 alerts have something to fire on.
 - Don't write the IP address or other unnecessary PII.
 - Validate the schema and data types, and test malformed events against the defined behaviour.
