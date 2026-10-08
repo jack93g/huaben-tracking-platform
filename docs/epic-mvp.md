@@ -202,7 +202,7 @@ Recommendation: one container per environment.
 
 **7. GTM: variables and the GA4 tag**
 - Add dataLayer variables for the contract's fields, and lookup variables on the hostname for the sGTM URL and the measurement ID (`localhost` → dev).
-- Build the GA4 tag for `page_view`, with the contract's own fields as event parameters. `session_id` is sent as `app_session_id`, so that Google's tag doesn't take it as its own session ID (D-027). Set `page_location`, `page_title`, and `page_referrer` from the dataLayer too, or the tag reads them from the real URL.
+- Build the GA4 tag for `page_view`, with the contract's own fields as event parameters. `session_id` is sent as `app_session_id`, so that Google's tag doesn't take it as its own session ID (D-027). Set all four page fields from the dataLayer too. Left alone, the tag reads `page_location`, `page_title`, and `page_referrer` from the real URL, and sends no `page_path` at all.
 - Turn off the Google tag's automatic page view, and GA4's "page changes based on browser history events". The app pushes `page_view` itself, so either would count every page twice.
 - Set each tag's consent settings, so the GA4 tag is blocked until `analytics_storage` is granted.
 - The GA4 tag doesn't go live in this ticket. Until the tracking domain exists it would send straight to Google, so it's connected to sGTM and published in TP-3.
