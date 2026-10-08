@@ -2,7 +2,7 @@
 
 This is the overview of the epic: where the app runs, how the environments are split, and what counts as done. The tickets themselves are GitHub issues, listed under [Tickets](#tickets).
 
-Decisions marked **Open** must be resolved and recorded in `docs/decisions.md` before the phase that depends on them starts.
+Decisions marked **Open** must be resolved and recorded in `docs/decisions.md` before the ticket that depends on them starts.
 
 ## Hosting context
 
