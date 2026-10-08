@@ -356,7 +356,9 @@ This repository is public, so entries leave out individual account names, organi
 
 - **Decision:**
   - Web GTM sends browser events with the GA4 tag, pointed at the tracking domain. In sGTM the built-in GA4 client claims them.
-  - The contract's own fields (`event_id`, `schema_version`, `event_timestamp`, `anonymous_id`, `session_id`) travel as event parameters. `user_id` uses GA4's own field.
+  - The contract's own fields travel as event parameters: `schema_version`, `event_timestamp`, `anonymous_id`, and `session_id` under the name `app_session_id`. `event_id` and `user_id` use Google's own fields.
+    - *Amended 2026-10-07*, after the tag was built and its request inspected. This first listed `event_id` and `session_id` as ordinary event parameters under their own names. `session_id` is now sent as the parameter `app_session_id`. Under its own name, Google's tag took the value as its own session ID, which is expected to be a number, and sent no separate parameter; that would have broken session counting in GA4 once events are forwarded there. The dataLayer key is still `session_id`: only the tag's parameter name differs, and the mapping in sGTM turns it back.
+    - Google's tag also treats `event_id` as its own field, a unique ID per event used to remove duplicates. That's what ours means, so it's left as is. It travels under Google's key for it, not as an ordinary parameter.
   - A mapping step in sGTM turns the GA4-shaped event into the contract's row before it's stored. On this path it always sets `source` to `frontend`, and it refuses the names of backend events.
   - The custom client (D-024) stays backend-only and keeps requiring its secret.
   - Consent Mode runs in **basic mode**: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied (D-021).

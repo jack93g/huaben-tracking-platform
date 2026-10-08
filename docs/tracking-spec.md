@@ -168,7 +168,19 @@ window.dataLayer.push({
 ## Sending frontend events to sGTM (D-027)
 
 - Web GTM sends browser events with the GA4 tag, pointed at the tracking domain. In sGTM the built-in GA4 client claims them.
-- The contract's own fields travel as event parameters: `event_id`, `schema_version`, `event_timestamp`, `anonymous_id`, and `session_id`. `user_id` uses GA4's own field.
+- The contract's fields travel in the request like this:
+
+  | Field | In the request | Note |
+  |---|---|---|
+  | `schema_version`, `event_timestamp`, `anonymous_id` | `ep.<name>` | Ordinary event parameters |
+  | `session_id` | `ep.app_session_id` | Renamed in the tag. As `session_id`, Google's tag takes it as its own session ID |
+  | `event_id` | `evnid` | Google's own field for a unique event ID, which is what ours is |
+  | `user_id` | `uid` | Google's own field |
+  | `page_location`, `page_title`, `page_referrer` | `dl`, `dt`, `dr` | Set from the dataLayer, overriding what the tag would read from the real URL |
+  | `page_path` | `dp` | Set from the dataLayer. The tag sends none unless it's set |
+
+- The keys in the table were read from the tag's request in the browser on 2026-10-07 and 2026-10-08. They're Google's wire format, not something this project defines, so check them again if Google's tag changes.
+- The request also carries details Google's tag adds by itself: its own client and session IDs (`cid`, `sid`), the region, screen size, language, and browser and operating system versions. sGTM copies only the contract's fields and drops the rest.
 - sGTM maps the GA4-shaped event to the contract's row before storing it, and builds the `consent` record from the request's Consent Mode state.
 - This path takes no secret, so anyone can post to it. The mapping therefore always sets `source` to `frontend` and refuses the names of backend events.
 - Consent Mode runs in basic mode: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied.
