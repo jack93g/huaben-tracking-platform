@@ -471,6 +471,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Consequences:**
   - Domain mappings are in preview. Google calls them "not production-ready" because of latency. They can't disable TLS 1.0/1.1, can't use custom certificates, and have no Cloud Armor or CDN. A certificate can take up to 24 hours.
   - **The identity that creates a mapping must be a verified owner of `huaben.app` in Search Console.** That's the CI apply account for each environment. Verifying the domain (a TXT record in Cloudflare) and adding both `tf-apply-*` accounts as owners is a one-time manual step, done by a person.
+    - Ownership covers the whole domain, which is broader than creating one mapping. It is the grant Cloud Run's domain mapping requires, so only the two apply accounts get it, and no plan account or other identity does.
   - Records pointing at Google must not be proxied by Cloudflare, or Google can't issue the certificate. If CAA records are ever added, they must allow `pki.goog` and `letsencrypt.org`.
 
 ### D-033: Tagging service: minimum 0 instances, CPU only during requests
@@ -495,7 +496,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Consequences:**
   - A fresh environment doesn't start until someone adds the value. The first deploy of the service therefore comes after that step.
   - Instances read the secret when they start, so rotating it needs a new revision.
-  - This is the one secret Terraform doesn't fully manage. The README documents the step.
+  - This is the one secret Terraform doesn't fully manage. TP-3 documents the step in the README.
 
 ### D-035: Tracking DNS records are added by hand in Cloudflare
 
@@ -512,7 +513,7 @@ This repository is public, so entries leave out individual account names, organi
   - Managing a whole zone in code is the common setup for a team. A single person with a handful of static records often uses the console.
 - **Consequences:**
   - The records aren't in code or reviewed in a PR, and drift isn't detected.
-    - The README lists the exact records and how to read them.
+    - TP-3 puts the exact records and how to read them in the README.
     - TP-3's verification checks them with `dig`.
     - A wrong or proxied record shows up as a certificate that never issues.
   - After the mapping is created the certificate waits for the record, then takes about 15 minutes, or up to 24 hours.
@@ -528,7 +529,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:**
   - Browser tracking requests carry no Google credentials, so a service that receives them has to accept anonymous requests. Domain-restricted sharing forbids `allUsers`, and weakening the policy would open it for every service in the organization.
   - A private tagging service behind a load balancer and IAP would cost about $18 per environment per month (D-032), and browsers still couldn't send the IAM token.
-  - The tagging service's protection is therefore at the application level: the mapping that fixes `source` and refuses backend event names (D-027), and the secret the backend client requires (D-024).
+  - The tagging service's protection is therefore at the application level, and what is settled is two things: the mapping that fixes `source` and refuses backend event names (accepted in D-027), and the secret the backend client requires (D-024). Guarding the browser path further, against forged frontend events and spam, is not settled. It is TP-4's open decision.
   - The preview service is only used by GTM's debug interface and the tagging server. Google's own setup deploys it unauthenticated, but whether it can be private wasn't verified. An IAM check would block the browser's calls to it, since they can't carry a token.
 - **Consequences:**
   - Anyone can post to the tagging service. Forged frontend events and spam are TP-4's open decision (D-027).
