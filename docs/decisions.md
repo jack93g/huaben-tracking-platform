@@ -106,6 +106,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Decision:** A CI job exports each live GTM container version as JSON into `gtm/` through the GTM API. When the live version changes, it opens a PR. Publishing still happens in the GTM UI.
 - **Why:** There's no official Terraform support for GTM. The community providers have little adoption and no Google support.
 - **Consequences:** GTM changes are reviewed after they're published, not before. Revisit after the MVP.
+  - *Amended 2026-10-11.* The export runs as a service account with no GCP roles, `gtm-export`, in the admin project. It is added by hand as a read-only user of each container. Workload Identity Federation lets any workflow run on `main` use it, which is accepted because it can only read the containers. The binding matches a run's branch, not a GitHub Environment: if the export job is ever given an Environment, its subject changes and the account needs a new binding in the bootstrap.
 
 ### D-011: Automated PR review reuses the app repo's DeepSeek workflow
 
