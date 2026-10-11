@@ -141,6 +141,7 @@ This repository is public, so entries leave out individual account names, organi
     - *Amended 2026-09-29 after a security review.* The first version also granted an unconditioned Project IAM Admin, which let an apply account give itself any role in its project, even though nothing needed it. It was removed.
     - When project-level grants are needed, Project IAM Admin comes back only **with an IAM condition** on `iam.googleapis.com/modifiedGrantsByRole`, listing the low-privilege roles it may grant.
     - Service Account Admin and User are project-wide for now, so TP-3 can create runtime service accounts and deploy as them. They're narrowed to specific accounts once those accounts exist.
+    - *Amended 2026-10-11.* Service Account Admin and User were replaced by narrower grants. See D-037.
   - **PR plans run the PR's own Terraform code with the plan account's access.** That code can read the environment's state and print it into public logs, and plan-time code (data sources, `external`) can use the plan account's token. Today only the repo owner can open same-repo PRs, and anyone with write access could already merge. So:
     - **secrets never go into Terraform state**: use write-only arguments (e.g. `secret_data_wo`) and ephemeral resources;
     - if anyone else is given write access, PR plans must be gated behind an approval, e.g. a `plan` GitHub Environment with required reviewers.
@@ -535,6 +536,37 @@ This repository is public, so entries leave out individual account names, organi
   - Anyone can post to the tagging service. Forged frontend events and spam are TP-4's open decision (D-027).
   - If the preview service has to be public, it's reachable by anyone who knows its URL. The URL isn't published, but it isn't a secret either.
   - Terraform grants no `allUsers` and no invoker role for either service.
+
+### D-037: The apply accounts create service accounts and act as the sGTM runtime accounts only
+
+*Accepted 2026-10-11 · TP-3 · amends D-013*
+
+- **Decision:**
+  - The apply accounts no longer hold Service Account Admin or User.
+  - A custom role lets them create, update, delete, get, and list service accounts. It has no `setIamPolicy`, so an apply account can't let itself act as another service account.
+  - Service Account User is granted with an IAM condition that limits it to accounts whose name starts with `sgtm-`. The sGTM runtime accounts follow that naming.
+  - For the rest of TP-3 they also hold Cloud Run Admin, a custom role for secrets (no `versions.access`, no `versions.add`), and a custom role for log exclusions only.
+- **Why:**
+  - Service Account Admin includes `iam.serviceAccounts.setIamPolicy`, which would let an apply account act as any service account in its project (D-013).
+  - A name-prefix condition needs no per-account binding, so the runtime accounts can be created by the same apply that deploys as them. Per-account bindings would need a bootstrap apply between two environment applies.
+  - The secrets role can't read or add a secret's value, which matches D-034.
+  - `logging.configWriter` also lets an account create log sinks to other destinations, which an exclusion doesn't need.
+- **Consequences:**
+  - A runtime account whose name doesn't start with `sgtm-` can't be deployed as. A new kind of runtime identity means a change to the condition in the bootstrap.
+  - **The condition's format for service account names wasn't verified before the first deploy.** The first dev apply that deploys as a runtime account is the test. If it fails, the fallbacks are per-account bindings added in a second bootstrap apply, or runtime accounts created in the bootstrap so that CI can't create identities at all. This entry is amended with the result.
+  - Cloud Run Admin includes `run.services.setIamPolicy`. The organization policy blocks `allUsers` (D-003), and D-036 grants no invoker role.
+  - Roles for the runtime accounts themselves, such as BigQuery access, come in TP-4. Project IAM Admin with a `modifiedGrantsByRole` condition (D-013) is added then if it's needed.
+
+### D-038: Cloud Run request logs are excluded
+
+*Accepted 2026-10-11 · TP-3*
+
+- **Decision:** A log exclusion drops Cloud Run's request logs (`run.googleapis.com/requests`) for the sGTM services, in both environments. Application logs are kept, for 30 days (D-022).
+- **Why:** The request log records the client IP, the user agent, and the full URL, which is personal data the platform doesn't need. An exclusion means they are never stored. A dedicated bucket with short retention would still hold them for its retention period, and would need a bucket, a sink, and an exclusion.
+- **Consequences:**
+  - Request counts, response codes, and latency come from Cloud Run's built-in metrics, which don't depend on the logs.
+  - Failed inserts are logged by the application, which TP-8's alert uses.
+  - Debugging an individual request is harder. Lifting the exclusion for a while is a change through a pull request.
 
 ## Open
 
