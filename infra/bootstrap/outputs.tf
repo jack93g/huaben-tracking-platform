@@ -14,3 +14,8 @@ output "state_bucket" {
   description = "GCS bucket holding all Terraform state."
   value       = google_storage_bucket.tfstate.name
 }
+
+output "gtm_export_service_account" {
+  description = "Email of the read-only GTM export account, to add as a user in each GTM container."
+  value       = google_service_account.gtm_export.email
+}

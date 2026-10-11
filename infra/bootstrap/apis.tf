@@ -13,6 +13,7 @@ locals {
     "serviceusage.googleapis.com",
     "storage.googleapis.com",
     "sts.googleapis.com",
+    "tagmanager.googleapis.com",
   ]
 
   env_apis = [

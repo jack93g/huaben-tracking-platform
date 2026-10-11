@@ -106,6 +106,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Decision:** A CI job exports each live GTM container version as JSON into `gtm/` through the GTM API. When the live version changes, it opens a PR. Publishing still happens in the GTM UI.
 - **Why:** There's no official Terraform support for GTM. The community providers have little adoption and no Google support.
 - **Consequences:** GTM changes are reviewed after they're published, not before. Revisit after the MVP.
+  - *Amended 2026-10-11.* The export runs as a service account with no GCP roles, `gtm-export`, in the admin project. It is added by hand as a read-only user of each container. Workload Identity Federation lets any workflow run on `main` use it, which is accepted because it can only read the containers. The binding matches a run's branch, not a GitHub Environment: if the export job is ever given an Environment, its subject changes and the account needs a new binding in the bootstrap.
 
 ### D-011: Automated PR review reuses the app repo's DeepSeek workflow
 
@@ -141,6 +142,7 @@ This repository is public, so entries leave out individual account names, organi
     - *Amended 2026-09-29 after a security review.* The first version also granted an unconditioned Project IAM Admin, which let an apply account give itself any role in its project, even though nothing needed it. It was removed.
     - When project-level grants are needed, Project IAM Admin comes back only **with an IAM condition** on `iam.googleapis.com/modifiedGrantsByRole`, listing the low-privilege roles it may grant.
     - Service Account Admin and User are project-wide for now, so TP-3 can create runtime service accounts and deploy as them. They're narrowed to specific accounts once those accounts exist.
+    - *Amended 2026-10-11.* Service Account Admin and User were replaced by narrower grants. See D-037.
   - **PR plans run the PR's own Terraform code with the plan account's access.** That code can read the environment's state and print it into public logs, and plan-time code (data sources, `external`) can use the plan account's token. Today only the repo owner can open same-repo PRs, and anyone with write access could already merge. So:
     - **secrets never go into Terraform state**: use write-only arguments (e.g. `secret_data_wo`) and ephemeral resources;
     - if anyone else is given write access, PR plans must be gated behind an approval, e.g. a `plan` GitHub Environment with required reviewers.
@@ -535,6 +537,40 @@ This repository is public, so entries leave out individual account names, organi
   - Anyone can post to the tagging service. Forged frontend events and spam are TP-4's open decision (D-027).
   - If the preview service has to be public, it's reachable by anyone who knows its URL. The URL isn't published, but it isn't a secret either.
   - Terraform grants no `allUsers` and no invoker role for either service.
+
+### D-037: The apply accounts create service accounts and act as the sGTM runtime accounts only
+
+*Accepted 2026-10-11 · TP-3 · amends D-013*
+
+- **Decision:**
+  - The apply accounts no longer hold Service Account Admin or User.
+  - A custom role lets them create, update, delete, get, and list service accounts. It has no `setIamPolicy`, so an apply account can't let itself act as another service account.
+  - Service Account User is granted with an IAM condition that limits it to accounts whose name starts with `sgtm-`. The sGTM runtime accounts follow that naming.
+  - For the rest of TP-3 they also hold Cloud Run Developer, a custom role for secrets (no direct `versions.access` or `versions.add`), and a custom role for log exclusions only.
+- **Why:**
+  - Service Account Admin includes `iam.serviceAccounts.setIamPolicy`, which would let an apply account act as any service account in its project (D-013).
+  - A name-prefix condition needs no per-account binding, so the runtime accounts can be created by the same apply that deploys as them. Per-account bindings would need a bootstrap apply between two environment applies.
+  - Cloud Run Developer, not Admin: it lacks `run.services.setIamPolicy`, which a service with `invoker_iam_disabled` (D-036) doesn't need.
+  - The secrets role has no `versions.access` or `versions.add`, so Terraform never handles the container config's value (D-034).
+  - `logging.configWriter` also lets an account create log sinks to other destinations, which an exclusion doesn't need.
+- **Consequences:**
+  - **Checked 2026-10-11:** none of the roles the apply accounts keep includes `iam.serviceAccounts.actAs`: not Viewer, Service Usage Admin, or Cloud Run Developer, and not the custom roles, which list their permissions. The conditional binding is therefore the only way they can act as a service account. To repeat the check: `gcloud iam roles describe <role> --format='value(includedPermissions)' | tr ';' '\n' | grep -c 'iam.serviceAccounts.actAs'` prints 0 for each of the three predefined roles.
+  - A runtime account whose name doesn't start with `sgtm-` can't be deployed as. A new kind of runtime identity means a change to the condition in the bootstrap.
+  - **The condition's format for service account names wasn't verified before the first deploy.** The first dev apply that deploys as a runtime account is the test. If it fails, the fallbacks are per-account bindings added in a second bootstrap apply, or runtime accounts created in the bootstrap so that CI can't create identities at all. This entry is amended with the result.
+  - **The secrets role doesn't stop an apply account reading the container config.** It can set a secret's IAM policy, which is how the runtime account gets access, so it could grant itself access. It can also deploy a service as an `sgtm-*` account with the secret mounted. D-034 keeps the value out of Terraform, state, and logs. It doesn't make it unreachable from CI. As far as we know the string only lets a tagging server fetch the container's configuration from GTM, and D-010 publishes that configuration in this repository.
+  - **Domain mappings:** neither Cloud Run Developer nor Admin lists a domain-mapping permission, so it's unknown which role covers `google_cloud_run_domain_mapping` (D-032). The first dev apply that creates a mapping is the test, and this entry is amended with the result.
+  - Roles for the runtime accounts themselves, such as BigQuery access, come in TP-4. Project IAM Admin with a `modifiedGrantsByRole` condition (D-013) is added then if it's needed.
+
+### D-038: Cloud Run request logs are excluded
+
+*Accepted 2026-10-11 · TP-3*
+
+- **Decision:** A log exclusion drops Cloud Run's request logs (`run.googleapis.com/requests`) for the sGTM services, in both environments. Application logs are kept, for 30 days (D-022).
+- **Why:** The request log records the client IP, the user agent, and the full URL, which is personal data the platform doesn't need. An exclusion means they are never stored. A dedicated bucket with short retention would still hold them for its retention period, and would need a bucket, a sink, and an exclusion.
+- **Consequences:**
+  - Request counts, response codes, and latency come from Cloud Run's built-in metrics, which don't depend on the logs.
+  - Failed inserts are logged by the application, which TP-8's alert uses.
+  - Debugging an individual request is harder. Lifting the exclusion for a while is a change through a pull request.
 
 ## Open
 
