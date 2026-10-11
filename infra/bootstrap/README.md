@@ -14,16 +14,16 @@ One-time setup for the platform, **applied locally by a person** (D-004). CI can
   | Account | Project roles | State access | Who can use it |
   |---|---|---|---|
   | `tf-plan-<env>` | Viewer, Security Reviewer | read `envs/<env>/` | any workflow run in this repository |
-  | `tf-apply-<env>` | Viewer, Service Usage Admin, Cloud Run Admin, and the custom roles below | read and write `envs/<env>/` | only jobs in the `<env>` GitHub Environment |
+  | `tf-apply-<env>` | Viewer, Service Usage Admin, Cloud Run Developer, and the custom roles below | read and write `envs/<env>/` | only jobs in the `<env>` GitHub Environment |
 
   - Tokens are accepted only from this repository, checked by numeric repository and owner ID.
   - The apply roles grow only as tickets need them. Project IAM Admin is never granted without an IAM condition limiting which roles it can grant (D-013).
   - **Custom roles** (D-037), created in each environment project:
     - `tfApplyServiceAccounts` creates, updates, deletes, gets, and lists service accounts, without setting their IAM policy.
-    - `tfApplySecrets` manages secrets and who can access them, but can't add or read a version. The container config's value is added by hand (D-034).
+    - `tfApplySecrets` manages secrets and who can access them, but has no permission to add or read a version. The container config's value is added by hand (D-034). Because it can set a secret's IAM policy, it doesn't stop the account reading the value (D-037).
     - `tfApplyLogExclusions` manages log exclusions only.
   - **Service Account User** is granted with a condition that limits it to service accounts named `sgtm-*`. The sGTM runtime accounts must use that prefix.
-- **The GTM export account** `gtm-export`, in the admin project, with no GCP roles. It is used by the workflow that exports the GTM containers into `gtm/` (D-010), and only by runs on `main`. After the bootstrap is applied, add its email (`terraform output gtm_export_service_account`) as a read-only user of the web container and of both server containers in GTM.
+- **The GTM export account** `gtm-export`, in the admin project, with no GCP roles. It is used by the workflow that exports the GTM containers into `gtm/` (D-010), and by any workflow run on `main`. That is accepted: it can only read the GTM containers, and a workflow reaches `main` through a pull request. After the bootstrap is applied, add its email (`terraform output gtm_export_service_account`) as a read-only user of the web container and of both server containers in GTM.
 
 ## Prerequisites
 

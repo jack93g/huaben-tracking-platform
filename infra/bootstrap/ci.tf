@@ -28,13 +28,15 @@ locals {
     apply = [
       "roles/viewer",
       "roles/serviceusage.serviceUsageAdmin",
-      "roles/run.admin",
+      "roles/run.developer",
     ]
   }
 
   # Custom roles for the apply accounts, created in each environment project.
-  # None of them can set IAM policy on service accounts, and none can read a
-  # secret's value (D-034, D-037, D-038).
+  # None of them can set IAM policy on service accounts, and none can read or
+  # add a secret's version directly. They can still set a secret's IAM policy
+  # (to give a runtime account access), so they are not a barrier to reading
+  # it: see D-037.
   ci_apply_custom_roles = {
     tfApplyServiceAccounts = {
       title       = "Terraform apply: manage service accounts"
@@ -49,7 +51,7 @@ locals {
     }
     tfApplySecrets = {
       title       = "Terraform apply: manage secrets"
-      description = "Create secrets and set who can access them. Cannot add or read versions."
+      description = "Create secrets and set who can access them. Cannot add or read versions directly."
       permissions = [
         "secretmanager.secrets.create",
         "secretmanager.secrets.delete",
@@ -194,8 +196,10 @@ resource "google_project_iam_member" "ci_apply_sgtm_user" {
 }
 
 # Exports the live GTM container versions into gtm/ (D-010). It has no GCP
-# roles. It is added as a read-only user in each GTM container by hand, and
-# only runs on main: scheduled and manual runs, never pull requests.
+# roles. It is added as a read-only user in each GTM container by hand. The
+# binding matches runs on main, not one workflow, so any workflow on main can
+# use it. That is accepted: it can only read the GTM containers, and getting
+# a workflow onto main takes a pull request.
 resource "google_service_account" "gtm_export" {
   project      = google_project.this["admin"].project_id
   account_id   = "gtm-export"

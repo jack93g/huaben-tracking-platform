@@ -545,16 +545,18 @@ This repository is public, so entries leave out individual account names, organi
   - The apply accounts no longer hold Service Account Admin or User.
   - A custom role lets them create, update, delete, get, and list service accounts. It has no `setIamPolicy`, so an apply account can't let itself act as another service account.
   - Service Account User is granted with an IAM condition that limits it to accounts whose name starts with `sgtm-`. The sGTM runtime accounts follow that naming.
-  - For the rest of TP-3 they also hold Cloud Run Admin, a custom role for secrets (no `versions.access`, no `versions.add`), and a custom role for log exclusions only.
+  - For the rest of TP-3 they also hold Cloud Run Developer, a custom role for secrets (no direct `versions.access` or `versions.add`), and a custom role for log exclusions only.
 - **Why:**
   - Service Account Admin includes `iam.serviceAccounts.setIamPolicy`, which would let an apply account act as any service account in its project (D-013).
   - A name-prefix condition needs no per-account binding, so the runtime accounts can be created by the same apply that deploys as them. Per-account bindings would need a bootstrap apply between two environment applies.
-  - The secrets role can't read or add a secret's value, which matches D-034.
+  - Cloud Run Developer, not Admin: it lacks `run.services.setIamPolicy`, which a service with `invoker_iam_disabled` (D-036) doesn't need.
+  - The secrets role has no `versions.access` or `versions.add`, so Terraform never handles the container config's value (D-034).
   - `logging.configWriter` also lets an account create log sinks to other destinations, which an exclusion doesn't need.
 - **Consequences:**
   - A runtime account whose name doesn't start with `sgtm-` can't be deployed as. A new kind of runtime identity means a change to the condition in the bootstrap.
   - **The condition's format for service account names wasn't verified before the first deploy.** The first dev apply that deploys as a runtime account is the test. If it fails, the fallbacks are per-account bindings added in a second bootstrap apply, or runtime accounts created in the bootstrap so that CI can't create identities at all. This entry is amended with the result.
-  - Cloud Run Admin includes `run.services.setIamPolicy`. The organization policy blocks `allUsers` (D-003), and D-036 grants no invoker role.
+  - **The secrets role doesn't stop an apply account reading the container config.** It can set a secret's IAM policy, which is how the runtime account gets access, so it could grant itself access. It can also deploy a service as an `sgtm-*` account with the secret mounted. D-034 keeps the value out of Terraform, state, and logs. It doesn't make it unreachable from CI. As far as we know the string only lets a tagging server fetch the container's configuration from GTM, and D-010 publishes that configuration in this repository.
+  - **Domain mappings:** neither Cloud Run Developer nor Admin lists a domain-mapping permission, so it's unknown which role covers `google_cloud_run_domain_mapping` (D-032). The first dev apply that creates a mapping is the test, and this entry is amended with the result.
   - Roles for the runtime accounts themselves, such as BigQuery access, come in TP-4. Project IAM Admin with a `modifiedGrantsByRole` condition (D-013) is added then if it's needed.
 
 ### D-038: Cloud Run request logs are excluded
