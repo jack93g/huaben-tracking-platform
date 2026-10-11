@@ -36,11 +36,7 @@ The web container is promoted through GTM Environments (D-028): publish a versio
 
 **Web GTM: one container with GTM Environments (D-028).** The local dev server loads the `dev` environment's snippet, GitHub Pages loads Live, and lookup variables on the hostname (`localhost` → dev) pick the sGTM URL and the measurement ID.
 
-**Open: how server GTM is split across environments.**
-- One server container per environment. This isolates them cleanly, and each container holds its own BigQuery project and dataset.
-- One shared container with a hostname lookup to pick the destination.
-
-Recommendation: one container per environment.
+**Server GTM: one container per environment (D-031).** Each has its own tagging and preview services, config, and BigQuery project and dataset.
 
 ---
 

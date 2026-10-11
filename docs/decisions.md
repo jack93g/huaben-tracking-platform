@@ -444,16 +444,103 @@ This repository is public, so entries leave out individual account names, organi
   - Anything that has to outlive a ticket goes in a decision or in the specification, not only in the issue. A closed issue is history.
   - The ticket sections removed from `docs/epic-mvp.md` matched their issues when they were removed, so no text was lost.
 
+### D-031: One server GTM container per environment
+
+*Accepted 2026-10-09 · TP-3*
+
+- **Decision:** Dev and prod each have their own server container, with their own tagging and preview services on Cloud Run. Each service is deployed with its container's config string. A version is promoted by exporting the dev container's JSON, importing it into the prod container with the merge option, and publishing.
+- **Why:**
+  - A tagging server is deployed with one container's config, so separate containers are the usual way to keep environments apart.
+  - Each container sends to its own BigQuery project. With one shared container, a hostname lookup would pick the destination, and a wrong lookup would write dev events into prod's table.
+  - The server container is empty today, so splitting now costs nothing. Splitting later would mean rebuilding the clients, the mapping, and the BigQuery tag (TP-4, TP-5).
+- **Consequences:**
+  - Promotion is manual, and a wrong merge option can overwrite prod's values. The export job (D-010) turns every live change into a PR diff, so it's visible after the fact.
+  - The web container stays single (D-028). Its lookup variable on the hostname picks the sGTM URL: `localhost` → `tracking.dev.huaben.app`, GitHub Pages → `tracking.huaben.app`.
+  - The export job covers three containers: the web container and both server containers.
+  - Whether a server container can use GTM Environments the way the web container does (D-028) wasn't established. It doesn't change this decision.
+
+### D-032: Cloud Run domain mapping for the tracking domains, in both environments
+
+*Accepted 2026-10-09 · TP-3*
+
+- **Decision:** `tracking.dev.huaben.app` and `tracking.huaben.app` are Cloud Run domain mappings, with DNS-only records in Cloudflare. Prod moves to a global external Application Load Balancer when real traffic arrives, or if monitoring shows latency.
+- **Why:**
+  - A load balancer costs about $18 per month per environment, a large share of the under-$10 target for both projects together (epic).
+  - Domain mappings are free and available in europe-west1.
+  - Tracking requests are sent in the background and don't block the UI.
+- **Consequences:**
+  - Domain mappings are in preview. Google calls them "not production-ready" because of latency. They can't disable TLS 1.0/1.1, can't use custom certificates, and have no Cloud Armor or CDN. A certificate can take up to 24 hours.
+  - **The identity that creates a mapping must be a verified owner of `huaben.app` in Search Console.** That's the CI apply account for each environment. Verifying the domain (a TXT record in Cloudflare) and adding both `tf-apply-*` accounts as owners is a one-time manual step, done by a person.
+  - Records pointing at Google must not be proxied by Cloudflare, or Google can't issue the certificate. If CAA records are ever added, they must allow `pki.goog` and `letsencrypt.org`.
+
+### D-033: Tagging service: minimum 0 instances, CPU only during requests
+
+*Accepted 2026-10-09 · TP-3*
+
+- **Decision:** In both environments, the tagging service has `min-instances = 0` and Cloud Run's default CPU allocation, which is throttled between requests. The preview service is limited to one instance, as Google requires.
+- **Why:** Google's own setup uses at least 2 instances with CPU always allocated, about $45 per month per server. That is more than the app's whole hosting budget (epic).
+- **Consequences:**
+  - Cold starts can delay or lose browser events, which aren't retried. Backend events are retried by the outbox for up to 48 hours (D-023).
+  - **A risk to test in dev before prod:** the spec has sGTM answer `200` before the BigQuery insert finishes. With throttled CPU, work after the response may stall. If backend events don't reach BigQuery reliably, switch to CPU always allocated, keeping `min-instances = 0`, and amend this entry.
+  - Revisit with real traffic.
+
+### D-034: The container config is a secret whose value is added by hand
+
+*Accepted 2026-10-09 · TP-3*
+
+- **Decision:** Terraform creates each environment's Secret Manager secret and the runtime service account's access to it, but no secret version. A person adds the container config string with `gcloud secrets versions add`. Cloud Run reads it from the secret.
+- **Why:**
+  - The config string holds an auth key, and plans run in public logs on the PR's own code (D-013).
+  - A write-only argument keeps the value out of state, but the value would then pass through a GitHub Environment secret and CI. Adding it by hand keeps it out of both.
+- **Consequences:**
+  - A fresh environment doesn't start until someone adds the value. The first deploy of the service therefore comes after that step.
+  - Instances read the secret when they start, so rotating it needs a new revision.
+  - This is the one secret Terraform doesn't fully manage. The README documents the step.
+
+### D-035: Tracking DNS records are added by hand in Cloudflare
+
+*Accepted 2026-10-11 · TP-3*
+
+- **Decision:**
+  - The records for `tracking.dev.huaben.app` and `tracking.huaben.app` are added by a person in Cloudflare, once each. They are the records Cloud Run shows for the domain mapping (D-032), read with `gcloud beta run domain-mappings describe`, and they are DNS-only, never proxied.
+  - The Search Console verification record (D-032) is also added by hand.
+  - Terraform creates the domain mappings and nothing in Cloudflare. No Cloudflare provider and no Cloudflare token are used.
+- **Why:**
+  - A Cloudflare API token is scoped to a zone, not to a record name. A CI token able to edit `huaben.app` could also edit the API, the mail routing (D-008), and the GitHub Pages records, so a leak would break the whole app, not just tracking.
+  - The records are two static CNAMEs that don't change after the first setup, so code would add little.
+  - Managing them in Terraform would add the project's first third-party provider, up to three tokens, and a way for PR plans to read Cloudflare without a secret that a PR could print.
+  - Managing a whole zone in code is the common setup for a team. A single person with a handful of static records often uses the console.
+- **Consequences:**
+  - The records aren't in code or reviewed in a PR, and drift isn't detected.
+    - The README lists the exact records and how to read them.
+    - TP-3's verification checks them with `dig`.
+    - A wrong or proxied record shows up as a certificate that never issues.
+  - After the mapping is created the certificate waits for the record, then takes about 15 minutes, or up to 24 hours.
+  - If a team or a second person starts changing the zone, revisit: a provider with a token limited to the tracking records, if Cloudflare supports that by then.
+
+### D-036: The tagging service is public through `invoker_iam_disabled`; the preview service is private if Preview mode allows it
+
+*Accepted 2026-10-11 · TP-3*
+
+- **Decision:**
+  - The tagging service sets `invoker_iam_disabled = true` on `google_cloud_run_v2_service`. The organization policy stays as it is (D-003).
+  - The preview service stays private, with the invoker check on, if GTM's Preview mode works that way. Otherwise it also disables the check. Which one is settled by testing in dev, and this entry is amended with the result.
+- **Why:**
+  - Browser tracking requests carry no Google credentials, so a service that receives them has to accept anonymous requests. Domain-restricted sharing forbids `allUsers`, and weakening the policy would open it for every service in the organization.
+  - A private tagging service behind a load balancer and IAP would cost about $18 per environment per month (D-032), and browsers still couldn't send the IAM token.
+  - The tagging service's protection is therefore at the application level: the mapping that fixes `source` and refuses backend event names (D-027), and the secret the backend client requires (D-024).
+  - The preview service is only used by GTM's debug interface and the tagging server. Google's own setup deploys it unauthenticated, but whether it can be private wasn't verified. An IAM check would block the browser's calls to it, since they can't carry a token.
+- **Consequences:**
+  - Anyone can post to the tagging service. Forged frontend events and spam are TP-4's open decision (D-027).
+  - If the preview service has to be public, it's reachable by anyone who knows its URL. The URL isn't published, but it isn't a secret either.
+  - Terraform grants no `allUsers` and no invoker role for either service.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
-| Server GTM across environments | TP-3 | One container per environment |
-| Domain mapping or global load balancer for sGTM | TP-3 | Domain mapping for the MVP |
-| Minimum Cloud Run instances | TP-3 | 0 in both environments |
-| Tracking DNS records | TP-3 | Cloudflare Terraform provider, DNS-only records |
 | Behaviour for malformed events | TP-4 | An `events_rejected` table |
 | Guarding the browser path against forged events and spam (D-027) | TP-4 | Validate against the contract and limit sizes; accept the rest for the MVP |
 | Backend delivery | TP-5 | Postgres outbox, sent by the existing worker |
