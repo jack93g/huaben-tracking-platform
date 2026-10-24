@@ -14,10 +14,10 @@ Server-side GTM on Cloud Run for one environment (D-031): a tagging service that
 
 1. **First apply, with `deploy_services = false`.** It creates everything except the services, which can't start without a secret version.
 2. **Create the environment's server container in GTM** (target "Server", "Manually provision tagging server") and copy its **Container Config** string. It holds an auth key: keep it in a password manager, never in this repository, an issue, or a chat.
-3. **Add the value to the secret.** Paste the string at the prompt and finish with Ctrl-D, so it stays out of your shell history:
+3. **Add the value to the secret.** Copy the string from your password manager and run the line below. It reads the clipboard, so the string stays out of your shell history, and `tr` removes a trailing newline, which could break the config. Then clear the clipboard with `pbcopy < /dev/null`:
 
    ```bash
-   gcloud secrets versions add sgtm-container-config --project=<project id> --data-file=-
+   pbpaste | tr -d '\n' | gcloud secrets versions add sgtm-container-config --project=<project id> --data-file=-
    ```
 
 4. **Turn the services on** in a pull request that sets `deploy_services = true` in the environment's module call. The tagging service reads the preview service's URL from it.

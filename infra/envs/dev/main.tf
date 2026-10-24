@@ -7,13 +7,13 @@ locals {
   region     = "europe-west1"
 }
 
-# Server-side GTM (D-031). The services stay off until a person has added the
-# container config's value to the secret (D-034); then this becomes true.
+# Server-side GTM (D-031). The services need a version of the container config
+# secret, which a person added by hand (D-034).
 module "sgtm" {
   source = "../../modules/sgtm"
 
   project_id          = local.project_id
   region              = local.region
-  deploy_services     = false
+  deploy_services     = true
   deletion_protection = false
 }
