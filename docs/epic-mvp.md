@@ -75,6 +75,17 @@ The epic is complete when, in prod:
 - TP-7: yes. Privacy verification can't wait once real users are tracked.
 - TP-8: only the failed-insert and freshness alerts are MVP. The fuller documentation can follow.
 
+## Go-live
+
+The platform is built, but the production site doesn't track anyone yet. As of 2026-10-24 the app's `deploy-frontend.yml` has no GTM container ID, so prod loads no Cookiebot banner, creates no identifiers, and sends no `page_view`. That is the app repo's state, so confirm it again before go-live. Adding the container ID is **go-live**. It is a change of its own, in the app repo, made last, and only when all of this holds:
+
+- The privacy notice is published. It names Cookiebot's cookie, the two identity cookies, and sGTM's `FPID` cookie, and it says backend events are kept under legitimate interest (D-021, D-029). Someone qualified should check it before the app is opened to the public.
+- TP-7's checks pass, in particular that with consent denied or not given, nothing is sent from the browser and no cookie is set. Backend events are a separate case: they are still sent, with a `user_id` only (D-021).
+- The Live version of the web container has been checked, and its GA4 tag points at the prod sGTM.
+- Prod stores events (TP-4, TP-5, TP-6), so the first visitors' events aren't lost.
+
+The epic's check in prod, a test `page_view` in `fct_events`, happens after go-live. Until then the MVP boundary above can only be met by `story_generated`.
+
 ## After the MVP
 
 - Route GA4 through sGTM, enable the GA4 BigQuery export, and build a reconciliation model.
