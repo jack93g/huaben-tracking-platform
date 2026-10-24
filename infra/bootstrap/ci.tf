@@ -28,7 +28,7 @@ locals {
     apply = [
       "roles/viewer",
       "roles/serviceusage.serviceUsageAdmin",
-      "roles/run.developer",
+      "roles/run.admin",
     ]
   }
 
