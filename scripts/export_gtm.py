@@ -54,7 +54,11 @@ def list_all(fetch, token, path, key):
 
 
 def redact(text):
-    """Make an API error body fit for a public log: a long number may be an ID."""
+    """Make an API error body fit for a public log.
+
+    A long number may be an ID, and a permission error can name the caller's email.
+    """
+    text = re.sub(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", "<email>", text)
     return re.sub(r"\d{6,}", "<id>", text)[:300]
 
 
