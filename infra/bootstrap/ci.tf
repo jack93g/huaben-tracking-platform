@@ -88,8 +88,9 @@ locals {
   # IAM conditions have startsWith and endsWith but no contains, so the prefix
   # is spelled out. It is not documented which form a service account's
   # resource name takes, so the likely ones are listed; D-037 says how this was
-  # checked. The wildcard form (projects/-/) would match an sgtm-* account in
-  # any project, but the binding is project-level, so it can only apply here.
+  # checked. "-" is a literal here, not a wildcard: the projects/-/ branch
+  # matches only if the API reports the name with that placeholder. Either way
+  # the binding is project-level, so it only applies to this project's accounts.
   # No length limit on expressions is documented; keep this one short anyway.
   sgtm_service_account_condition = {
     for env, project in local.env_projects : env => join(" && ", [
