@@ -593,7 +593,8 @@ This repository is public, so entries leave out individual account names, organi
   - Naming the branch by content makes a repeat run a no-op, and it never deletes or resets a branch that has a pull request open.
   - The account ID is left out because this repository is public.
 - **Consequences:**
-  - A person has to open the pull request. Nothing tells them except the run's summary and a notice, so the workflow's failures and results need looking at.
+  - A person has to open the pull request.
+    - *Amended 2026-10-24.* At first only the run's summary and a notice told them. The workflow now also opens one issue per pushed branch, mentioning the owner, with the diff and pull request links, so GitHub notifies them. The issues carry a `gtm-export` label and are found by label and title, and only open ones count, so a change seen before (a rollback in GTM, say) gets a new issue. Closing the issue without merging the pull request brings a new one the next day. The job gains `issues: write` for that. A failed run still shows red in Actions.
   - Merged or abandoned `gtm-export/*` branches pile up until someone deletes them.
   - Unpublished workspace changes aren't exported, only the live version. A deleted container keeps its file until it is removed by hand.
   - The identity binding only trusts runs on `main` (D-037), so the workflow can't be tried from a branch. The first real run is a manual run on `main` after the merge.
