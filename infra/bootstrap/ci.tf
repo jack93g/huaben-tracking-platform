@@ -84,11 +84,11 @@ locals {
   # The runtime accounts the apply accounts may act as, per environment, and
   # no others (D-037). Each is bound by name. The accounts are created by the
   # environment's own apply, and a binding on an account that does not exist
-  # yet fails, so an environment is added here only after its accounts exist:
-  # prod's after its first apply (the module's deploy_services flag allows
-  # that order).
+  # yet fails, so an environment is added here only after its accounts exist
+  # (the module's deploy_services flag allows that order).
   sgtm_runtime_accounts = {
-    dev = ["sgtm-tagging", "sgtm-preview"]
+    dev  = ["sgtm-tagging", "sgtm-preview"]
+    prod = ["sgtm-tagging", "sgtm-preview"]
   }
 
   sgtm_runtime_account_bindings = merge([
