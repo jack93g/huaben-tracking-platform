@@ -88,12 +88,14 @@ locals {
   # IAM conditions have startsWith and endsWith but no contains, so the prefix
   # is spelled out. It is not documented which form a service account's
   # resource name takes, so the likely ones are listed; D-037 says how this was
-  # checked.
+  # checked. The wildcard form (projects/-/) would match an sgtm-* account in
+  # any project, but the binding is project-level, so it can only apply here.
+  # No length limit on expressions is documented; keep this one short anyway.
   sgtm_service_account_condition = {
     for env, project in local.env_projects : env => join(" && ", [
       "resource.type == \"iam.googleapis.com/ServiceAccount\"",
       "(${join(" || ", [
-        for prefix in ["projects/-", "projects/_", "projects/${project}"] :
+        for prefix in ["projects/-", "projects/${project}"] :
         "resource.name.startsWith(\"${prefix}/serviceAccounts/sgtm-\")"
       ])})",
     ])
