@@ -14,10 +14,13 @@ locals {
 module "sgtm" {
   source = "../../modules/sgtm"
 
-  project_id      = local.project_id
-  region          = local.region
-  deploy_services = true
-  tracking_domain = "tracking.huaben.app"
+  project_id = local.project_id
+  # GTM's debugger runs in the browser and cannot send an IAM token, so a
+  # private preview service gets a 403 (D-036).
+  preview_invoker_iam_disabled = true
+  region                       = local.region
+  deploy_services              = true
+  tracking_domain              = "tracking.huaben.app"
 }
 
 output "sgtm_dns_records" {
