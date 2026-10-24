@@ -117,10 +117,17 @@ jobs:
             echo "Review the diff, then [open the pull request](${url}). The workflow can't open it itself (D-039)."
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          # One issue per branch, so a change is not missed. The mention makes
-          # GitHub notify the owner. It is created even when the branch already
-          # existed, so an earlier failure here is made up on the next run.
-          found=$(gh issue list --state all --search "\"${branch}\" in:title" --json number --jq 'length')
+          # One open issue per branch, so a change is not missed and a day
+          # with nothing new adds no noise. The mention makes GitHub notify the
+          # owner (it notifies nobody if the repository ever belongs to an
+          # organization). The issues are found by their label and title, not
+          # by GitHub's search index, which can lag. Only open issues count, so
+          # content seen before (a rollback in GTM, say) gets a new issue.
+          # It is created even when the branch already existed, so an earlier
+          # failure here is made up on the next run.
+          gh label create gtm-export --color ededed --description "A GTM container's live version changed" --force > /dev/null
+          found=$(gh issue list --label gtm-export --state open --limit 200 --json title \
+            | jq --arg branch "${branch}" '[.[] | select(.title | contains($branch))] | length')
           if [ "${found}" -eq 0 ]; then
             body=$(printf '%s\n' \
               "@${GITHUB_REPOSITORY_OWNER} A GTM container's live version changed: ${changed[*]}." \
@@ -131,6 +138,7 @@ jobs:
               "" \
               "Opened by the GTM export workflow (D-039).")
             gh issue create \
+              --label gtm-export \
               --title "GTM export: review the diff and open the PR (${branch})" \
               --body "${body}" > /dev/null
           fi
