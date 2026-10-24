@@ -1,0 +1,38 @@
+[
+  {
+    "name": "received_at",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "When sGTM received the event, in UTC. The table is partitioned on it."
+  },
+  {
+    "name": "reason",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "Why the event was rejected, e.g. an unknown event_name or a property of the wrong type."
+  },
+  {
+    "name": "source",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "The path the event arrived on: frontend (the GA4 client), backend (the custom client), or unknown."
+  },
+  {
+    "name": "event_id",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The event's event_id, when it could be read. Not trusted: it may not be a UUID."
+  },
+  {
+    "name": "payload",
+    "type": "STRING",
+    "mode": "NULLABLE",
+    "description": "The raw event as received, cut to a fixed length. Can hold anything a sender posted."
+  },
+  {
+    "name": "payload_truncated",
+    "type": "BOOLEAN",
+    "mode": "REQUIRED",
+    "description": "Whether payload was cut short."
+  }
+]
