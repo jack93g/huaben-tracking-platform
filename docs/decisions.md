@@ -497,6 +497,7 @@ This repository is public, so entries leave out individual account names, organi
   - A write-only argument keeps the value out of state, but the value would then pass through a GitHub Environment secret and CI. Adding it by hand keeps it out of both.
 - **Consequences:**
   - A fresh environment doesn't start until someone adds the value. The first deploy of the service therefore comes after that step.
+    - *Amended 2026-10-24.* The sGTM module has a `deploy_services` flag, off in a fresh environment. The first apply then creates the secret, the runtime accounts, and the log exclusion, but no Cloud Run service, because a service can't start without a secret version. After a person adds the value, a pull request turns the flag on. The steps are in `infra/modules/sgtm/README.md`.
   - Instances read the secret when they start, so rotating it needs a new revision.
   - This is the one secret Terraform doesn't fully manage. TP-3 documents the step in the README.
 

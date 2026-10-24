@@ -55,3 +55,7 @@ __pycache__/
 .env
 .env.*
 .DS_Store
+
+# Modules are pinned by the lock file of the root that calls them; the
+# validate hook creates one inside each module directory.
+infra/modules/**/.terraform.lock.hcl
