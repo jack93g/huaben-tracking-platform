@@ -19,14 +19,13 @@ output "runtime_service_accounts" {
 }
 
 output "dns_records" {
-  description = "The DNS records Cloud Run asks for the tracking domain. Add them by hand in Cloudflare, DNS-only. Empty until the mapping exists."
-  value = try([
-    for record in google_cloud_run_domain_mapping.tagging[0].status[0].resource_records :
-    { type = record.type, name = record.name, value = record.rrdata }
-  ], [])
-}
-
-output "tracking_domain" {
-  description = "The tracking domain, or null."
-  value       = var.tracking_domain
+  description = "The DNS records Cloud Run asks for the tracking domain. Add them by hand in Cloudflare, DNS-only. Null when there is no mapping; empty while the mapping exists but Cloud Run has not reported its records yet."
+  value = (
+    length(google_cloud_run_domain_mapping.tagging) == 0
+    ? null
+    : try([
+      for record in google_cloud_run_domain_mapping.tagging[0].status[0].resource_records :
+      { type = record.type, name = record.name, value = record.rrdata }
+    ], [])
+  )
 }
