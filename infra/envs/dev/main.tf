@@ -12,7 +12,8 @@ locals {
 module "sgtm" {
   source = "../../modules/sgtm"
 
-  project_id      = local.project_id
-  region          = local.region
-  deploy_services = false
+  project_id          = local.project_id
+  region              = local.region
+  deploy_services     = false
+  deletion_protection = false
 }

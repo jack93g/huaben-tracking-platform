@@ -88,7 +88,7 @@ resource "google_cloud_run_v2_service" "preview" {
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   invoker_iam_disabled = var.preview_invoker_iam_disabled
-  deletion_protection  = false
+  deletion_protection  = var.deletion_protection
 
   template {
     service_account = google_service_account.runtime["preview"].email
@@ -151,7 +151,7 @@ resource "google_cloud_run_v2_service" "tagging" {
   # allUsers, so the invoker check is off (D-036). The protection is in the
   # container: the mapping and the backend client's secret.
   invoker_iam_disabled = true
-  deletion_protection  = false
+  deletion_protection  = var.deletion_protection
 
   template {
     service_account = google_service_account.runtime["tagging"].email

@@ -19,7 +19,7 @@ variable "deploy_services" {
 }
 
 variable "image" {
-  description = "Google's sGTM image. The :stable tag is moving by design; instances pick up a new image when they start."
+  description = "Google's sGTM image. The :stable tag moves by design, but Cloud Run resolves it when a revision is created, so an existing revision keeps its image until a new one is deployed. Google advises restarting the servers periodically to pick up updates."
   type        = string
   default     = "gcr.io/cloud-tagging-10302018/gtm-cloud-image:stable"
 }
@@ -38,4 +38,10 @@ variable "preview_invoker_iam_disabled" {
   EOT
   type        = bool
   default     = false
+}
+
+variable "deletion_protection" {
+  description = "Whether Terraform refuses to destroy the Cloud Run services. Keep true in prod; dev sets false so it can be rebuilt."
+  type        = bool
+  default     = true
 }
