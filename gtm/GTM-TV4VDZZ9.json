@@ -1,0 +1,81 @@
+{
+  "builtInVariable": [
+    {
+      "containerId": "283386687",
+      "name": "Event Name",
+      "type": "eventName"
+    }
+  ],
+  "client": [
+    {
+      "clientId": "1",
+      "containerId": "283386687",
+      "name": "GA4",
+      "parameter": [
+        {
+          "key": "activateDefaultPaths",
+          "type": "boolean",
+          "value": "true"
+        },
+        {
+          "key": "cookieManagement",
+          "type": "template",
+          "value": "server"
+        },
+        {
+          "key": "cookieName",
+          "type": "template",
+          "value": "FPID"
+        },
+        {
+          "key": "cookieDomain",
+          "type": "template",
+          "value": "auto"
+        },
+        {
+          "key": "cookiePath",
+          "type": "template",
+          "value": "/"
+        },
+        {
+          "key": "cookieMaxAgeInSec",
+          "type": "template",
+          "value": "63072000"
+        }
+      ],
+      "type": "gaaw_client"
+    }
+  ],
+  "container": {
+    "containerId": "283386687",
+    "features": {
+      "supportBuiltInVariables": true,
+      "supportClients": true,
+      "supportEnvironments": true,
+      "supportFolders": true,
+      "supportGtagConfigs": false,
+      "supportTags": true,
+      "supportTemplates": true,
+      "supportTransformations": true,
+      "supportTriggers": true,
+      "supportUserPermissions": true,
+      "supportVariables": true,
+      "supportVersions": true,
+      "supportWorkspaces": true,
+      "supportZones": true
+    },
+    "name": "huaben prod",
+    "publicId": "GTM-TV4VDZZ9",
+    "tagIds": [
+      "GTM-TV4VDZZ9"
+    ],
+    "taggingServerUrls": [
+      "https://tracking.huaben.app"
+    ],
+    "usageContext": [
+      "server"
+    ]
+  },
+  "containerId": "283386687",
+  "containerVersionId": "1"
+}
