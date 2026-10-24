@@ -45,3 +45,14 @@ variable "deletion_protection" {
   type        = bool
   default     = true
 }
+
+variable "tracking_domain" {
+  description = <<-EOT
+    The domain the tagging service is served on, e.g. tracking.dev.huaben.app, or null
+    for none. The mapping is created with the services (D-032). The DNS record it needs
+    is added by hand in Cloudflare (D-035), and the apply identity must be a verified
+    owner of the domain in Search Console.
+  EOT
+  type        = string
+  default     = null
+}

@@ -15,5 +15,11 @@ module "sgtm" {
   project_id          = local.project_id
   region              = local.region
   deploy_services     = true
+  tracking_domain     = "tracking.dev.huaben.app"
   deletion_protection = false
+}
+
+output "sgtm_dns_records" {
+  description = "The records to add in Cloudflare for the tracking domain (DNS-only)."
+  value       = module.sgtm.dns_records
 }
