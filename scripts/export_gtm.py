@@ -53,6 +53,11 @@ def list_all(fetch, token, path, key):
             return items
 
 
+def redact(text):
+    """Make an API error body fit for a public log: a long number may be an ID."""
+    return re.sub(r"\d{6,}", "<id>", text)[:300]
+
+
 def scrub(value):
     """Return value without the dropped keys, at every depth."""
     if isinstance(value, dict):
@@ -105,8 +110,10 @@ def main(argv):
     try:
         written = export(token, argv[1])
     except urllib.error.HTTPError as error:
-        # The body says which API or permission is the problem. It holds no token.
-        print(f"Tag Manager API error {error.code}: {error.read().decode()[:500]}", file=sys.stderr)
+        # The body says which API or permission is the problem. It holds no token,
+        # but it can name an account or project by number, and the log is public.
+        body = redact(error.read().decode(errors="replace"))
+        print(f"Tag Manager API error {error.code}: {body}", file=sys.stderr)
         return 1
     if not written:
         print(
