@@ -24,7 +24,7 @@ locals {
     # condition on iam.googleapis.com/modifiedGrantsByRole listing only the
     # low-privilege roles it may grant (D-013).
     # Service Account Admin and User are not granted: the custom roles and the
-    # conditional Service Account User binding below replace them (D-037).
+    # per-account Service Account User bindings below replace them (D-037).
     apply = [
       "roles/viewer",
       "roles/serviceusage.serviceUsageAdmin",
@@ -81,26 +81,21 @@ locals {
     }
   ]...)
 
-  # The apply accounts may act as the sGTM runtime accounts and no others
-  # (D-037). Matching on the "sgtm-" name prefix means the binding needs no
-  # per-account entry, and the accounts can be created by the same apply.
-  #
-  # IAM conditions have startsWith and endsWith but no contains, so the prefix
-  # is spelled out. It is not documented which form a service account's
-  # resource name takes, so the likely ones are listed; D-037 says how this was
-  # checked. "-" is a literal here, not a wildcard: the projects/-/ branch
-  # matches only if the API reports the name with that placeholder. Either way
-  # the binding is project-level, so it only applies to this project's accounts.
-  # No length limit on expressions is documented; keep this one short anyway.
-  sgtm_service_account_condition = {
-    for env, project in local.env_projects : env => join(" && ", [
-      "resource.type == \"iam.googleapis.com/ServiceAccount\"",
-      "(${join(" || ", [
-        for prefix in ["projects/-", "projects/${project}"] :
-        "resource.name.startsWith(\"${prefix}/serviceAccounts/sgtm-\")"
-      ])})",
-    ])
+  # The runtime accounts the apply accounts may act as, per environment, and
+  # no others (D-037). Each is bound by name. The accounts are created by the
+  # environment's own apply, and a binding on an account that does not exist
+  # yet fails, so an environment is added here only after its accounts exist:
+  # prod's after its first apply (the module's deploy_services flag allows
+  # that order).
+  sgtm_runtime_accounts = {
+    dev = ["sgtm-tagging", "sgtm-preview"]
   }
+
+  sgtm_runtime_account_bindings = merge([
+    for env, names in local.sgtm_runtime_accounts : {
+      for name in names : "${env}/${name}" => { env = env, name = name }
+    }
+  ]...)
 
   ci_project_bindings = merge([
     for key, account in local.ci_accounts : {
@@ -196,19 +191,15 @@ resource "google_project_iam_member" "ci_apply_custom" {
 }
 
 # Service Account User lets the apply account deploy a Cloud Run service as a
-# runtime account. The condition limits it to the sgtm-* accounts (D-037).
-resource "google_project_iam_member" "ci_apply_sgtm_user" {
-  for_each = local.env_projects
+# runtime account. It is bound on each runtime account by name (D-037): a
+# condition on the account's name prefix did not match, and the form of the
+# name that IAM uses in conditions is not documented.
+resource "google_service_account_iam_member" "ci_apply_runtime_user" {
+  for_each = local.sgtm_runtime_account_bindings
 
-  project = each.value
-  role    = "roles/iam.serviceAccountUser"
-  member  = google_service_account.ci["${each.key}/apply"].member
-
-  condition {
-    title       = "sgtm runtime accounts only"
-    description = "Act as the sGTM runtime service accounts and no others (D-037)."
-    expression  = local.sgtm_service_account_condition[each.key]
-  }
+  service_account_id = "projects/${local.env_projects[each.value.env]}/serviceAccounts/${each.value.name}@${local.env_projects[each.value.env]}.iam.gserviceaccount.com"
+  role               = "roles/iam.serviceAccountUser"
+  member             = google_service_account.ci["${each.value.env}/apply"].member
 }
 
 # Exports the live GTM container versions into gtm/ (D-010). It has no GCP

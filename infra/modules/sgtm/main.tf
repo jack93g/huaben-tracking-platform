@@ -8,8 +8,9 @@ locals {
   # The services that log requests we do not want to keep (D-038).
   service_names = ["sgtm-tagging", "sgtm-preview"]
 
-  # The runtime accounts must be named sgtm-*: the apply accounts may only
-  # act as accounts with that prefix (D-037).
+  # The apply accounts may only act as the accounts listed in the bootstrap
+  # (sgtm_runtime_accounts, D-037): a new or renamed account needs a change
+  # and a local apply there before a service can run as it.
   runtime_accounts = {
     tagging = "sgtm-tagging"
     preview = "sgtm-preview"
