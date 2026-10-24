@@ -5,7 +5,7 @@ Server-side GTM on Cloud Run for one environment (D-031): a tagging service that
 ## What it creates
 
 - The Cloud Run and Secret Manager APIs.
-- Two runtime service accounts, `sgtm-tagging` and `sgtm-preview`. The name prefix matters: the CI apply accounts can only act as accounts named `sgtm-*` (D-037).
+- Two runtime service accounts, `sgtm-tagging` and `sgtm-preview`. The CI apply accounts can only act as the accounts listed in the bootstrap (`sgtm_runtime_accounts` in `infra/bootstrap/ci.tf`, D-037), so a new or renamed account needs a change and a local apply there first.
 - The secret `sgtm-container-config`, **without a value**, replicated only in the environment's region. Both runtime accounts can read it.
 - A log exclusion for the services' Cloud Run request logs, which hold the client IP, user agent, and URL (D-038).
 - The two Cloud Run services, only when `deploy_services` is true.
