@@ -55,6 +55,11 @@ jobs:
           GTM_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
         run: python scripts/export_gtm.py gtm
 
+      # A pushed branch is public at once, before any pull request is opened,
+      # so a secret that ended up in a container must stop the run here.
+      - name: Scan the export for secrets
+        run: gitleaks dir gtm --redact --no-banner
+
       # Commits made through the API are signed by GitHub, which the ruleset
       # requires on every commit of a pull request. Commits made with git here
       # would be unsigned. The branch is named by the content, so a run that
@@ -65,10 +70,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Modified and new export files. The export never deletes or renames.
           changed=()
           while IFS= read -r line; do
-            changed+=("${line}")
-          done < <(git status --porcelain --untracked-files=all -- 'gtm/*.json' | awk '{print $2}')
+            if [ -f "${line}" ]; then
+              changed+=("${line}")
+            fi
+          done < <(git ls-files --modified --others --exclude-standard -- 'gtm/*.json')
           if [ "${#changed[@]}" -eq 0 ]; then
             echo "The export matches main. Nothing to do."
             exit 0

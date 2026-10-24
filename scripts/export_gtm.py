@@ -110,7 +110,8 @@ def main(argv):
         return 1
     if not written:
         print(
-            "No containers were exported. Is the export account a user of the containers?",
+            "No containers were exported. Either the export account is not a user of any "
+            "container, or no container has a published live version.",
             file=sys.stderr,
         )
         return 1
