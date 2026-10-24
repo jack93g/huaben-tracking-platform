@@ -1,0 +1,59 @@
+{
+  "builtInVariable": [
+    {
+      "containerId": "266073994",
+      "name": "Page URL",
+      "type": "pageUrl"
+    },
+    {
+      "containerId": "266073994",
+      "name": "Page Hostname",
+      "type": "pageHostname"
+    },
+    {
+      "containerId": "266073994",
+      "name": "Page Path",
+      "type": "pagePath"
+    },
+    {
+      "containerId": "266073994",
+      "name": "Referrer",
+      "type": "referrer"
+    },
+    {
+      "containerId": "266073994",
+      "name": "Event",
+      "type": "event"
+    }
+  ],
+  "container": {
+    "containerId": "266073994",
+    "features": {
+      "supportBuiltInVariables": true,
+      "supportClients": false,
+      "supportEnvironments": true,
+      "supportFolders": true,
+      "supportGtagConfigs": false,
+      "supportTags": true,
+      "supportTemplates": true,
+      "supportTransformations": false,
+      "supportTriggers": true,
+      "supportUserPermissions": true,
+      "supportVariables": true,
+      "supportVersions": true,
+      "supportWorkspaces": true,
+      "supportZones": true
+    },
+    "name": "huaben.app",
+    "publicId": "GTM-KF33X5LB",
+    "tagIds": [
+      "GTM-KF33X5LB"
+    ],
+    "usageContext": [
+      "web"
+    ]
+  },
+  "containerId": "266073994",
+  "containerVersionId": "1",
+  "name": "Empty Container"
+}
