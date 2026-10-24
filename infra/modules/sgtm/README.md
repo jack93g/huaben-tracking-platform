@@ -40,5 +40,5 @@ Server-side GTM on Cloud Run for one environment (D-031): a tagging service that
 
 - **Rotating the config.** Add a new secret version. Instances read the secret when they start, so a running instance keeps the old value until it is replaced. To apply it at once, deploy a new revision.
 - **Updating Google's image.** The `:stable` tag moves, but Cloud Run resolves it when a revision is created. A running revision keeps its image until a new revision is deployed. Google advises restarting the servers from time to time to pick up updates.
-- **The preview service is private by default** (`preview_invoker_iam_disabled = false`, D-036). GTM's Preview mode may need it public: set the variable to `true` and amend D-036 with the result.
+- **The preview service has to be public** (`preview_invoker_iam_disabled = true`, D-036). GTM's debugger runs in the browser and can't send an IAM token, so a private service gives a 403 and Preview mode doesn't work. It is the module's default.
 - **Destroying.** `deletion_protection` defaults to true. The dev environment sets it to false so it can be rebuilt.
