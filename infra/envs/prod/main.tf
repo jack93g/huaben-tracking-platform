@@ -7,16 +7,16 @@ locals {
   region     = "europe-west1"
 }
 
-# Server-side GTM (D-031). The services stay off until the bootstrap lists this
-# environment's runtime accounts (sgtm_runtime_accounts in infra/bootstrap/ci.tf,
-# D-037) and a person has added the container config's value to the secret
-# (D-034). Then deploy_services becomes true. Deletion protection stays on.
+# Server-side GTM (D-031). The bootstrap lists this environment's runtime
+# accounts (sgtm_runtime_accounts in infra/bootstrap/ci.tf, D-037) and a person
+# has added the container config's value to the secret (D-034). Deletion
+# protection stays on.
 module "sgtm" {
   source = "../../modules/sgtm"
 
   project_id      = local.project_id
   region          = local.region
-  deploy_services = false
+  deploy_services = true
   tracking_domain = "tracking.huaben.app"
 }
 
