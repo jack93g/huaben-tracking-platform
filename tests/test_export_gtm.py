@@ -135,7 +135,7 @@ def test_main_needs_a_token(tmp_path, monkeypatch):
 
 def test_error_bodies_lose_long_numbers_before_they_are_logged(tmp_path, monkeypatch, capsys):
     body = (
-        b'{"error": {"message": "No access to accounts/6295841021 in project 1055929613859 '
+        b'{"error": {"message": "No access to accounts/6295841021 in project 1234567890123 '
         b'for someone@example.com"}}'
     )
 
@@ -148,6 +148,6 @@ def test_error_bodies_lose_long_numbers_before_they_are_logged(tmp_path, monkeyp
     assert export_gtm.main(["export_gtm.py", str(tmp_path)]) == 1
     err = capsys.readouterr().err
     assert "403" in err
-    assert "6295841021" not in err and "1055929613859" not in err
+    assert "6295841021" not in err and "1234567890123" not in err
     assert "<id>" in err
     assert "someone@example.com" not in err and "<email>" in err
