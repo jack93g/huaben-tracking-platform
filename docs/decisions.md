@@ -106,6 +106,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Decision:** A CI job exports each live GTM container version as JSON into `gtm/` through the GTM API. When the live version changes, it opens a PR. Publishing still happens in the GTM UI.
 - **Why:** There's no official Terraform support for GTM. The community providers have little adoption and no Google support.
 - **Consequences:** GTM changes are reviewed after they're published, not before. Revisit after the MVP.
+  - *Amended 2026-10-24.* The first version said the job opens a PR when the live version changes. It pushes a branch instead and a person opens the PR (D-039).
   - *Amended 2026-10-11.* The export runs as a service account with no GCP roles, `gtm-export`, in the admin project. It is added by hand as a read-only user of each container. Workload Identity Federation lets any workflow run on `main` use it, which is accepted because it can only read the containers. The binding matches a run's branch, not a GitHub Environment: if the export job is ever given an Environment, its subject changes and the account needs a new binding in the bootstrap.
 
 ### D-011: Automated PR review reuses the app repo's DeepSeek workflow
@@ -574,6 +575,27 @@ This repository is public, so entries leave out individual account names, organi
   - Request counts, response codes, and latency come from Cloud Run's built-in metrics, which don't depend on the logs.
   - Failed inserts are logged by the application, which TP-8's alert uses.
   - Debugging an individual request is harder. Lifting the exclusion for a while is a change through a pull request.
+
+### D-039: The GTM export pushes a branch, and a person opens the pull request
+
+*Accepted 2026-10-24 · TP-3 · amends D-010*
+
+- **Decision:**
+  - The `GTM export` workflow runs daily and on demand, only on `main`. It logs in as `gtm-export` through Workload Identity Federation, with the read-only Tag Manager scope.
+  - `scripts/export_gtm.py` writes the live version of every container the account can see to `gtm/<public ID>.json`. It removes the account's numeric ID, resource paths, URLs, and fingerprints.
+  - When the files differ from `main`, the workflow pushes a branch `gtm-export/<hash of the content>`, with its commits made through the GitHub API, and links to the pull request form in the run summary. A person opens the pull request.
+  - `id-token: write` may now be held by the Terraform workflows and this one. CLAUDE.md says so, and also that it is never given to a workflow that runs code from a pull request or handles other secrets.
+- **Why:**
+  - A pull request opened with the workflow's own token doesn't start other workflows, so the required checks (`pre-commit`, `plan (dev)`, `plan (prod)`) would never run and the pull request could never merge. Fixing that takes a GitHub App or a personal token, and a new action in the allowlist. Neither was worth it for a daily diff that one person reads.
+  - Commits made with `git` in the workflow would be unsigned, and the ruleset requires every commit of a pull request to be signed (D-007). Commits made through the API are signed by GitHub.
+  - Naming the branch by content makes a repeat run a no-op, and it never deletes or resets a branch that has a pull request open.
+  - The account ID is left out because this repository is public.
+- **Consequences:**
+  - A person has to open the pull request. Nothing tells them except the run's summary and a notice, so the workflow's failures and results need looking at.
+  - Merged or abandoned `gtm-export/*` branches pile up until someone deletes them.
+  - Unpublished workspace changes aren't exported, only the live version. A deleted container keeps its file until it is removed by hand.
+  - The identity binding only trusts runs on `main` (D-037), so the workflow can't be tried from a branch. The first real run is a manual run on `main` after the merge.
+  - A GitHub App could automate the pull request later. That is a new decision, and it needs the app's action added to the allowlist first.
 
 ## Open
 
