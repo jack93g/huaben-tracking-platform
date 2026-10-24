@@ -203,3 +203,21 @@ resource "google_cloud_run_v2_service" "tagging" {
     google_secret_manager_secret_iam_member.runtime_access,
   ]
 }
+
+# The tracking domain for the tagging service (D-032). Cloud Run issues the
+# certificate once the DNS record exists. The record is added by hand in
+# Cloudflare, DNS-only, never proxied (D-035): see the dns_records output.
+resource "google_cloud_run_domain_mapping" "tagging" {
+  count = var.deploy_services && var.tracking_domain != null ? 1 : 0
+
+  name     = var.tracking_domain
+  location = var.region
+
+  metadata {
+    namespace = var.project_id
+  }
+
+  spec {
+    route_name = google_cloud_run_v2_service.tagging[0].name
+  }
+}

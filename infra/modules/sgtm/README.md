@@ -21,7 +21,20 @@ Server-side GTM on Cloud Run for one environment (D-031): a tagging service that
    ```
 
 4. **Turn the services on** in a pull request that sets `deploy_services = true` in the environment's module call. The tagging service reads the preview service's URL from it.
-5. **Domain and DNS.** The domain mapping and the DNS records are added in a later change (D-032, D-035), and this section will list the exact records.
+5. **Domain and DNS** (D-032, D-035). The domain mapping is created with the services when `tracking_domain` is set. The certificate only issues once the DNS record exists, and the record is added by hand:
+   1. Read the records from the apply's output (`sgtm_dns_records`, in the job log or `terraform output`), or from `gcloud beta run domain-mappings describe --domain <domain> --region <region> --project <project id>`, under `resourceRecords`.
+   2. Add them in Cloudflare as **DNS-only** records, never proxied, or Google can't issue the certificate. If CAA records are ever added, they must allow `pki.goog` and `letsencrypt.org`.
+   3. Wait. The certificate usually takes about 15 minutes and can take up to 24 hours.
+   4. Check it, with the domain's own name:
+
+      ```bash
+      dig +short <domain>
+      curl -s https://<domain>/healthy
+      ```
+
+      The second should print `ok`. A TLS error means the certificate isn't ready yet.
+
+   The identity that creates the mapping must be a verified owner of the domain in Search Console. For CI that is the environment's apply account.
 
 ## Changing things later
 
