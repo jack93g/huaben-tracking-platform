@@ -22,6 +22,7 @@ One-time setup for the platform, **applied locally by a person** (D-004). CI can
     - `tfApplyServiceAccounts` creates, updates, deletes, gets, and lists service accounts, without setting their IAM policy.
     - `tfApplySecrets` manages secrets and who can access them, but has no permission to add or read a version. The container config's value is added by hand (D-034). Because it can set a secret's IAM policy, it doesn't stop the account reading the value (D-037).
     - `tfApplyLogExclusions` manages log exclusions only.
+    - `tfApplyBigQuery` manages datasets and tables and who can access a dataset (TP-4). It has no job or query permissions.
   - **Service Account User** is bound on each sGTM runtime account by name (`sgtm_runtime_accounts` in `ci.tf`), not project-wide. An environment is added to that list after its first apply has created the accounts, because a binding on an account that doesn't exist yet fails.
 - **The GTM export account** `gtm-export`, in the admin project, with no GCP roles. It is used by the workflow that exports the GTM containers into `gtm/` (D-010), and by any workflow run on `main`. That is accepted: it can only read the GTM containers, and a workflow reaches `main` through a pull request. After the bootstrap is applied, add its email (`terraform output gtm_export_service_account`) as a read-only user of the web container and of both server containers in GTM.
 
