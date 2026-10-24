@@ -186,7 +186,7 @@ window.dataLayer.push({
 - Consent Mode runs in basic mode: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied.
 - So a frontend event's `analytics_storage` is always `granted`. A page view from someone who declined isn't stored as denied; it's absent.
 - Google's tag sets its own `_ga` cookies once consent is granted. Its `client_id` isn't stored; the identity is the one described above.
-- **sGTM's GA4 client sets a cookie too.** Its response to a collect request sets `FPID` on the tracking domain (`tracking.huaben.app`, or `tracking.dev.huaben.app` in dev): `Secure`, `HttpOnly`, host-only, and a lifetime of two years. It is set only when the GA4 tag fires, which Consent Mode blocks until analytics consent is granted. It is not one of the contract's identifiers and isn't stored. The privacy notice must name it. Whether to turn it off in the client's settings is for TP-7 to decide.
+- **sGTM's GA4 client sets a cookie too.** Its response to a collect request sets `FPID` on the tracking domain (`tracking.huaben.app`, or `tracking.dev.huaben.app` in dev): `Secure`, `HttpOnly`, host-only, and a lifetime of two years. Observed in dev: it is set on the response to a plain collect request, whatever the request carries. In the browser, such requests are only sent after analytics consent, because Consent Mode blocks the tag until then (D-027). That second part is the expectation, and TP-7 verifies it. The cookie is not one of the contract's identifiers and isn't stored. The privacy notice must name it. Whether to turn it off in the client's settings is for TP-7 to decide.
 
 ## Sending backend events to sGTM (D-024)
 

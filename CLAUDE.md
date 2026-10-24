@@ -98,8 +98,8 @@ Sessions expire. If `gcloud` or Terraform fails with a re-authentication error, 
 **Terraform:**
 - The bootstrap is only ever applied locally, by a person.
 - Environments are applied by CI: dev on merge to `main`, prod after approval in the `prod` GitHub Environment. A branch can also be deployed to dev manually, before merging, to try it out.
-- **A pull request that depends on a change to `infra/bootstrap/` is applied locally first, then merged.** Merging starts the dev apply at once, and it fails if the bootstrap change isn't live yet.
-- **Approve prod runs oldest first, and check each plan.** A prod apply plans against the code of its own merge when it runs. An older run approved after a newer one would plan to undo the newer change, and could destroy resources. Never approve a plan that shows deletions nobody expects.
+- **The user applies a change to `infra/bootstrap/` locally, before the pull request that depends on it is merged.** Merging starts the dev apply at once, and it fails if the bootstrap change isn't live yet. Environment roots are still applied only by CI.
+- **Approve prod runs oldest first, and check each plan.** The `apply-prod` job in `terraform.yml` checks out the code of its own merge and runs its own `terraform plan` when it starts, so it uses no plan saved by an earlier run. An older run approved after a newer one would plan to undo the newer change, and could destroy resources. Never approve a plan that shows deletions nobody expects.
 - Commit `.terraform.lock.hcl`, and pin provider versions.
 - `*.tfvars` files are gitignored.
 - **No secrets in Terraform state.** PR plans run the PR's own code with read access to state and print to public logs (D-013). Pass secrets with write-only arguments (e.g. `secret_data_wo`) or ephemeral resources, never as regular attributes or outputs.
