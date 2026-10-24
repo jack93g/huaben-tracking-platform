@@ -14,7 +14,7 @@ One-time setup for the platform, **applied locally by a person** (D-004). CI can
   | Account | Project roles | State access | Who can use it |
   |---|---|---|---|
   | `tf-plan-<env>` | Viewer, Security Reviewer | read `envs/<env>/` | any workflow run in this repository |
-  | `tf-apply-<env>` | Viewer, Service Usage Admin, Cloud Run Developer, and the custom roles below | read and write `envs/<env>/` | only jobs in the `<env>` GitHub Environment |
+  | `tf-apply-<env>` | Viewer, Service Usage Admin, Cloud Run Admin, and the custom roles below | read and write `envs/<env>/` | only jobs in the `<env>` GitHub Environment |
 
   - Tokens are accepted only from this repository, checked by numeric repository and owner ID.
   - The apply roles grow only as tickets need them. Project IAM Admin is never granted without an IAM condition limiting which roles it can grant (D-013).
