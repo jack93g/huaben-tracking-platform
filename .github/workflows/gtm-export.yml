@@ -1,0 +1,116 @@
+name: GTM export
+
+# Exports the live version of each GTM container into gtm/ (D-010, D-039).
+# It runs on main only, as a read-only account with no GCP roles, on a
+# schedule and on demand. When the export differs from main, it pushes a
+# branch, gtm-export/<hash of the content>, and says so in the run summary.
+# A person opens the pull request from that branch: a pull request opened with
+# the workflow's own token would not start the required checks (D-039).
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: gtm-export
+  cancel-in-progress: false
+
+env:
+  WIF_PROVIDER: projects/1055929613859/locations/global/workloadIdentityPools/github/providers/huaben-tracking-platform
+  SA_DOMAIN: huaben-tracking-platform-admin.iam.gserviceaccount.com
+
+jobs:
+  export:
+    name: export
+    # The account's identity binding only accepts runs on main (D-037's
+    # bootstrap), so say so here instead of failing at the login.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      # contents: push the branch and its commits through the API.
+      contents: write
+      # id-token: log in as the export account (D-039).
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs the pinned Python. The export script uses only the standard library.
+      - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        id: auth
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: gtm-export@${{ env.SA_DOMAIN }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/tagmanager.readonly
+
+      - name: Export the live container versions
+        env:
+          GTM_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+        run: python scripts/export_gtm.py gtm
+
+      # A pushed branch is public at once, before any pull request is opened,
+      # so a secret that ended up in a container must stop the run here.
+      - name: Scan the export for secrets
+        run: gitleaks dir gtm --redact --no-banner
+
+      # Commits made through the API are signed by GitHub, which the ruleset
+      # requires on every commit of a pull request. Commits made with git here
+      # would be unsigned. The branch is named by the content, so a run that
+      # finds the same change again does nothing, and never touches a branch
+      # that has a pull request open.
+      - name: Push a branch if the export differs from main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Modified and new export files. The export never deletes or renames.
+          changed=()
+          while IFS= read -r line; do
+            if [ -f "${line}" ]; then
+              changed+=("${line}")
+            fi
+          done < <(git ls-files --modified --others --exclude-standard -- 'gtm/*.json')
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "The export matches main. Nothing to do."
+            exit 0
+          fi
+
+          hash=$(sha256sum "${changed[@]}" | sha256sum | cut -c1-10)
+          branch="gtm-export/${hash}"
+          repo="repos/${GITHUB_REPOSITORY}"
+
+          if gh api "${repo}/git/ref/heads/${branch}" > /dev/null 2>&1; then
+            echo "Branch ${branch} already exists. Nothing to do."
+            exit 0
+          fi
+
+          gh api -X POST "${repo}/git/refs" -f ref="refs/heads/${branch}" -f sha="${GITHUB_SHA}" > /dev/null
+          for file in "${changed[@]}"; do
+            existing=$(gh api "${repo}/contents/${file}?ref=${GITHUB_SHA}" --jq .sha 2> /dev/null || true)
+            base64 -w0 "${file}" > "${RUNNER_TEMP}/content.b64"
+            jq -n \
+              --arg message "GTM export: ${file}" \
+              --arg branch "${branch}" \
+              --arg sha "${existing}" \
+              --rawfile content "${RUNNER_TEMP}/content.b64" \
+              '{message: $message, branch: $branch, content: $content} + (if $sha != "" then {sha: $sha} else {} end)' \
+              > "${RUNNER_TEMP}/payload.json"
+            gh api -X PUT "${repo}/contents/${file}" --input "${RUNNER_TEMP}/payload.json" > /dev/null
+          done
+
+          url="https://github.com/${GITHUB_REPOSITORY}/compare/main...${branch}?expand=1"
+          echo "::notice title=GTM export::A GTM container changed. Open a pull request: ${url}"
+          {
+            echo "## GTM export"
+            echo
+            echo "A GTM container's live version changed: ${changed[*]}."
+            echo
+            echo "Review the diff, then [open the pull request](${url}). The workflow can't open it itself (D-039)."
+          } >> "${GITHUB_STEP_SUMMARY}"
