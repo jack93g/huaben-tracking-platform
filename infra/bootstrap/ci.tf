@@ -84,7 +84,23 @@ locals {
   # The apply accounts may act as the sGTM runtime accounts and no others
   # (D-037). Matching on the "sgtm-" name prefix means the binding needs no
   # per-account entry, and the accounts can be created by the same apply.
-  sgtm_service_account_condition = "resource.type == \"iam.googleapis.com/ServiceAccount\" && resource.name.contains(\"/serviceAccounts/sgtm-\")"
+  #
+  # IAM conditions have startsWith and endsWith but no contains, so the prefix
+  # is spelled out. It is not documented which form a service account's
+  # resource name takes, so the likely ones are listed; D-037 says how this was
+  # checked. "-" is a literal here, not a wildcard: the projects/-/ branch
+  # matches only if the API reports the name with that placeholder. Either way
+  # the binding is project-level, so it only applies to this project's accounts.
+  # No length limit on expressions is documented; keep this one short anyway.
+  sgtm_service_account_condition = {
+    for env, project in local.env_projects : env => join(" && ", [
+      "resource.type == \"iam.googleapis.com/ServiceAccount\"",
+      "(${join(" || ", [
+        for prefix in ["projects/-", "projects/${project}"] :
+        "resource.name.startsWith(\"${prefix}/serviceAccounts/sgtm-\")"
+      ])})",
+    ])
+  }
 
   ci_project_bindings = merge([
     for key, account in local.ci_accounts : {
@@ -191,7 +207,7 @@ resource "google_project_iam_member" "ci_apply_sgtm_user" {
   condition {
     title       = "sgtm runtime accounts only"
     description = "Act as the sGTM runtime service accounts and no others (D-037)."
-    expression  = local.sgtm_service_account_condition
+    expression  = local.sgtm_service_account_condition[each.key]
   }
 }
 
