@@ -32,12 +32,12 @@ variable "tagging_max_instances" {
 
 variable "preview_invoker_iam_disabled" {
   description = <<-EOT
-    Whether the preview service is public. False keeps it private, but GTM's Preview
-    mode then fails with a 403, because the browser cannot send an IAM token (D-036).
-    Both environments set this to true.
+    Whether the preview service is public. It has to be: GTM's debugger runs in the
+    browser and cannot send an IAM token, so a private service gives Preview mode a 403
+    (D-036). Set false only to see that for yourself.
   EOT
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "deletion_protection" {
