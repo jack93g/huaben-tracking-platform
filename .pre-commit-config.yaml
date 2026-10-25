@@ -36,7 +36,7 @@ repos:
         entry: uv run python scripts/generate_contract.py --check
         language: system
         pass_filenames: false
-        files: ^(contract/|scripts/generate_contract\.py|dbt/models/staging/_contract__sources\.yml)
+        files: ^(contract/|scripts/generate_contract\.py|dbt/models/staging/_contract__sources\.yml|gtm/templates/)
 
       - id: contract-tests
         name: contract (tests)
@@ -44,3 +44,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^(contract/|scripts/generate_contract\.py|tests/|pyproject\.toml|uv\.lock)
+
+      # Runs the sGTM tag template's code against mocked sGTM APIs (TP-4).
+      - id: gtm-template-tests
+        name: gtm template (tests)
+        entry: node --test tests/gtm/
+        language: system
+        pass_filenames: false
+        files: ^(gtm/templates/|tests/gtm/|scripts/generate_contract\.py)

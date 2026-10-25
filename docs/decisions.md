@@ -608,6 +608,7 @@ This repository is public, so entries leave out individual account names, organi
 - **Why:** One bad row can fail a whole insert. Dropping it, or inserting with `skipInvalidRows`, would lose events without a trace. A rejects table keeps them for debugging and shows how often a sender gets the contract wrong.
 - **Consequences:**
   - The raw payload can hold anything a sender posts, so the table is kept for 30 days only, and the payload is truncated.
+  - On the browser path the payload keeps only the contract's own keys. Google's tag also sends the IP address, client ID, user agent, region and more, none of which is stored anywhere.
   - A failed insert into either table is logged with the `event_id` and the error, which TP-8's alert uses.
 
 ### D-041: The browser path is guarded by validation, size limits, and an `Origin` check
