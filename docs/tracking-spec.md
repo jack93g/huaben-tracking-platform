@@ -183,6 +183,8 @@ window.dataLayer.push({
 - The request also carries details Google's tag adds by itself: its own client and session IDs (`cid`, `sid`), the region, screen size, language, and browser and operating system versions. sGTM copies only the contract's fields and drops the rest.
 - sGTM maps the GA4-shaped event to the contract's row before storing it, and builds the `consent` record from the request's Consent Mode state.
 - This path takes no secret, so anyone can post to it. The mapping therefore always sets `source` to `frontend` and refuses the names of backend events.
+- **Guarding it (D-041).** sGTM also validates each event against the contract (known event name, UUID v4 identifiers, property types and ranges, string lengths) and checks the request's `Origin`, or its `Referer` when there is none, against the site's hostnames. A request from any other origin is logged and not stored. The `Origin` check stops casual misuse only: a request made outside a browser can send an allowed one. There is no rate limit.
+- **Consent** is read from `x-ga-gcs` in the event data, which the GA4 client takes from the request's `gcs` parameter: `G1`, then `ad_storage` and `analytics_storage` as 1 or 0. A missing or malformed value counts as denied, and the browser path rejects an event that isn't granted (`consent_not_granted`). Only `analytics_storage` is recorded; the other signals stay null.
 - Consent Mode runs in basic mode: the tag is blocked until `analytics_storage` is granted, so nothing is sent when consent is denied.
 - So a frontend event's `analytics_storage` is always `granted`. A page view from someone who declined isn't stored as denied; it's absent.
 - Google's tag sets its own `_ga` cookies once consent is granted. Its `client_id` isn't stored; the identity is the one described above.
@@ -210,6 +212,9 @@ X-Tracking-Secret: <secret>
 - `analytics.events` has one typed column per common field, plus `properties` as JSON. Its schema is generated: [contract/generated/bigquery/events.schema.json](../contract/generated/bigquery/events.schema.json).
 - The table is partitioned by day on `server_timestamp` and clustered by `event_name`.
 - Adding an event or a property doesn't change the table. dbt extracts typed values from `properties`.
+- `properties` is a JSON column, and sGTM inserts it as a JSON string.
+- **Rejected events (D-040).** sGTM validates every event against the contract before inserting it. One that fails goes to `analytics.events_rejected` instead, with the reason as a short code (e.g. `invalid_event_id`, `missing_property:<name>`, `consent_not_granted`), the path it arrived on, and its raw payload cut to 8,000 characters. The table is partitioned by day on `received_at` and expires after 30 days. On the browser path the payload keeps only the contract's own keys: Google's IP address, client ID, user agent and the rest are never stored.
+- **A failed insert** is logged with the `event_id` and BigQuery's reasons, not the row, which holds the user's identifiers. The write is best-effort and not retried.
 
 ## Retention (D-022)
 

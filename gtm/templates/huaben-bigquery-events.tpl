@@ -40,6 +40,18 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "TEXT",
+    "name": "projectId",
+    "displayName": "BigQuery project ID",
+    "simpleValueType": true,
+    "help": "The environment's GCP project, e.g. huaben-tracking-platform-dev. Use a constant variable that differs per environment. The template's BigQuery permission must allow this project.",
+    "valueValidators": [
+      {
+        "type": "NON_EMPTY"
+      }
+    ]
+  },
+  {
+    "type": "TEXT",
     "name": "allowedOrigins",
     "displayName": "Allowed origins",
     "simpleValueType": true,
@@ -67,7 +79,6 @@ const getAllEventData = require('getAllEventData');
 const getRequestHeader = require('getRequestHeader');
 const getTimestampMillis = require('getTimestampMillis');
 const getType = require('getType');
-const isConsentGranted = require('isConsentGranted');
 const JSON = require('JSON');
 const logToConsole = require('logToConsole');
 const makeInteger = require('makeInteger');
@@ -213,9 +224,9 @@ const MAX_PAYLOAD = 8000;
 
 function insert(table, row, eventId, done) {
   BigQuery.insert(
-    // No project ID: the container writes to the project it runs in, so the
-    // dev and prod containers stay identical.
-    {datasetId: DATASET, tableId: table},
+    // The permission only allows a call that names its project, so the project
+    // comes from a per-environment variable, like the allowed origins.
+    {projectId: data.projectId, datasetId: DATASET, tableId: table},
     [row],
     {ignoreUnknownValues: false, skipInvalidRows: false},
     function() {
@@ -223,10 +234,49 @@ function insert(table, row, eventId, done) {
     },
     function(errors) {
       // TP-8's alert fires on this entry.
-      logToConsole(JSON.stringify({type: 'bigquery_insert_failed', table: table, event_id: eventId, error: errors}));
+      logToConsole(JSON.stringify({type: 'bigquery_insert_failed', table: table, event_id: eventId, error: errorReasons(errors)}));
       done(false);
     }
   );
+}
+
+// The properties column is JSON, and the streaming insert wants a JSON column's
+// value as a string. An object would be read as a RECORD and refused.
+function storedRow(row) {
+  const stored = {};
+  const names = Object.keys(row);
+  for (let i = 0; i < names.length; i++) stored[names[i]] = row[names[i]];
+  stored.properties = JSON.stringify(row.properties);
+  return stored;
+}
+
+// BigQuery's error for a row echoes the whole row back, with the user's
+// identifiers, and its messages can quote values. Logs outlive an erasure
+// request (D-022), so only the reasons and field names are logged.
+function errorReasons(errors) {
+  // Anything unexpected is reported as unknown, never passed through: it
+  // could be, or contain, the row.
+  const unknown = [{reason: 'unknown', field: ''}];
+  if (getType(errors) !== 'array') return unknown;
+  const reasons = [];
+  for (let i = 0; i < errors.length; i++) {
+    const item = errors[i];
+    const inner = getType(item) === 'object' && getType(item.errors) === 'array' ? item.errors : [item];
+    for (let j = 0; j < inner.length; j++) {
+      const error = inner[j];
+      if (getType(error) !== 'object') {
+        reasons.push(unknown[0]);
+      } else {
+        // Not the message: BigQuery's wording can quote the value that failed.
+        // The field's name is enough to find the problem.
+        reasons.push({
+          reason: isString(error.reason) ? error.reason : 'unknown',
+          field: isString(error.location) && error.location.length <= 100 ? error.location : ''
+        });
+      }
+    }
+  }
+  return reasons.length > 0 ? reasons : unknown;
 }
 
 function rejectedRow(reason) {
@@ -300,9 +350,18 @@ function mapBrowserEvent(e) {
     // Sent as app_session_id, because Google's tag takes session_id as its own.
     session_id: orNull(e.app_session_id),
     // Only analytics_storage is known; the other signals stay null (spec).
-    consent: {analytics_storage: isConsentGranted('analytics_storage') ? 'granted' : 'denied'},
+    consent: {analytics_storage: analyticsStorageGranted(e) ? 'granted' : 'denied'},
     properties: properties
   };
+}
+
+// Server containers have no consent API. The GA4 client puts Google's consent
+// state in the event data as x-ga-gcs: G1, then ad_storage and analytics_storage
+// as 1 (granted) or 0 (denied), e.g. G101. Missing or malformed counts as denied.
+function analyticsStorageGranted(e) {
+  const gcs = e['x-ga-gcs'];
+  return isString(gcs) && gcs.length === 4 && gcs.substring(0, 2) === 'G1' &&
+    '01'.indexOf(gcs.charAt(2)) !== -1 && gcs.charAt(3) === '1';
 }
 
 // The backend's event arrives in the contract's shape, without server_timestamp.
@@ -495,7 +554,7 @@ if (path === 'frontend' && !originAllowed()) {
   const row = path === 'frontend' ? mapBrowserEvent(eventData) : mapBackendEvent(eventData);
   const reason = validate(row);
   if (reason === null) {
-    insert(EVENTS_TABLE, row, row.event_id, function(ok) {
+    insert(EVENTS_TABLE, storedRow(row), row.event_id, function(ok) {
       if (ok) data.gtmOnSuccess(); else data.gtmOnFailure();
     });
   } else {

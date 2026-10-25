@@ -72,20 +72,21 @@ function getType(value) {
 }
 
 // Runs the template once and returns what it wrote, logged, and reported.
-function run({ path = "frontend", event, headers = { origin: "http://localhost:3000" }, consent = true, insertFails = false, allowedOrigins = "http://localhost:3000, https://huaben.app" }) {
+function run({ path = "frontend", event, headers = { origin: "http://localhost:3000" }, gcs = "G101", insertFails = false, insertErrors = [{ reason: "invalid", message: "forced failure" }], allowedOrigins = "http://localhost:3000, https://huaben.app", projectId = "test-project" }) {
   const result = { inserts: [], logs: [], outcome: null };
+  // Google's consent state arrives in the event data, from the request's gcs parameter.
+  if (gcs !== undefined && event && path === "frontend") event = { ...event, "x-ga-gcs": gcs };
   const apis = {
     BigQuery: {
       insert(connection, rows, options, onSuccess, onFailure) {
         result.inserts.push({ connection, rows, options });
-        insertFails ? onFailure([{ reason: "invalid", message: "forced failure" }]) : onSuccess();
+        insertFails ? onFailure(insertErrors) : onSuccess();
       },
     },
     getAllEventData: () => event,
     getRequestHeader: (name) => headers[name],
     getTimestampMillis: () => NOW_MS,
     getType,
-    isConsentGranted: () => consent,
     JSON,
     logToConsole: (message) => result.logs.push(message),
     makeInteger: (value) => parseInt(value, 10),
@@ -96,6 +97,7 @@ function run({ path = "frontend", event, headers = { origin: "http://localhost:3
   const data = {
     path,
     allowedOrigins,
+    projectId,
     gtmOnSuccess: () => (result.outcome = "success"),
     gtmOnFailure: () => (result.outcome = "failure"),
   };
@@ -126,7 +128,8 @@ test("a browser page_view becomes the contract's row", () => {
     anonymous_id: UUID2,
     session_id: UUID3,
     consent: { analytics_storage: "granted" },
-    properties: { page_location: "http://localhost:3000/", page_path: "/", page_title: "话本 Huaben" },
+    // A JSON column: the streaming insert wants a string, and refuses an object.
+    properties: JSON.stringify({ page_location: "http://localhost:3000/", page_path: "/", page_title: "话本 Huaben" }),
   });
   assert.equal(result.outcome, "success");
 });
@@ -217,9 +220,22 @@ for (const [name, overrides, reason] of [
   });
 }
 
-test("a browser event without analytics consent is rejected", () => {
-  const { row } = rejected({}, { consent: false });
-  assert.equal(row.reason, "consent_not_granted");
+for (const [name, gcs] of [
+  ["analytics denied", "G100"],
+  ["analytics denied with ads granted", "G110"],
+  ["no gcs parameter", null],
+  ["a malformed gcs parameter", "G1"],
+  ["a gcs parameter from another format", "G201"],
+  ["a malformed ad_storage digit", "G1a1"],
+]) {
+  test(`a browser event with ${name} is rejected as consent_not_granted`, () => {
+    assert.equal(rejected({}, { gcs }).row.reason, "consent_not_granted");
+  });
+}
+
+test("analytics granted is read from gcs whatever ad_storage says", () => {
+  assert.equal(only(run({ event: browserEvent(), gcs: "G111" }), "events").consent.analytics_storage, "granted");
+  assert.equal(only(run({ event: browserEvent(), gcs: "G101" }), "events").consent.analytics_storage, "granted");
 });
 
 test("a rejected event keeps its raw payload and nothing of Google's details", () => {
@@ -252,7 +268,8 @@ test("a backend event is stored as it arrives, with server_timestamp added", () 
   const row = only(result, "events");
   assert.equal(row.source, "backend");
   assert.equal(row.server_timestamp, NOW_MS / 1000);
-  assert.deepEqual(row.properties, backendEvent().properties);
+  assert.equal(typeof row.properties, "string");
+  assert.deepEqual(JSON.parse(row.properties), backendEvent().properties);
   assert.deepEqual(row.consent, { analytics_storage: "denied" });
   assert.equal(result.outcome, "success");
 });
@@ -289,7 +306,7 @@ for (const [name, overrides, reason] of [
 
 test("optional properties may be left out", () => {
   const result = run({ path: "backend", event: backendEvent(), headers: {} });
-  assert.equal(only(result, "events").properties.latency_ms, undefined);
+  assert.equal(JSON.parse(only(result, "events").properties).latency_ms, undefined);
 });
 
 // --- Insert failures -------------------------------------------------------------
@@ -301,8 +318,38 @@ test("a failed insert is logged with the event_id and the error, and the tag fai
   assert.equal(entry.type, "bigquery_insert_failed");
   assert.equal(entry.table, "events");
   assert.equal(entry.event_id, UUID);
-  assert.match(JSON.stringify(entry.error), /forced failure/);
+  assert.deepEqual(entry.error, [{ reason: "invalid", field: "" }]);
 });
+
+test("the failed insert's log has the reason and field, and none of the echoed row or message", () => {
+  // BigQuery's error for a row repeats the row, identifiers included, and its message can quote a value.
+  const echoed = [
+    {
+      errors: [{ reason: "invalid", location: "event_timestamp", message: `bad value '${UUID2}'` }],
+      row: { user_id: "2", anonymous_id: UUID2 },
+    },
+  ];
+  const result = run({ event: browserEvent(), insertFails: true, insertErrors: echoed });
+  const logged = result.logs.at(-1);
+  assert.match(logged, /"reason":"invalid"/);
+  assert.match(logged, /"field":"event_timestamp"/);
+  assert.ok(!logged.includes(UUID2) && !logged.includes("user_id") && !logged.includes("bad value"), logged);
+});
+
+for (const [name, insertErrors] of [
+  ["an error that is not a list", { row: { user_id: "2", anonymous_id: UUID2 } }],
+  ["an error that is a string", `row: ${UUID2}`],
+  ["a list with an empty entry", [null, { errors: [null], row: { user_id: "2" } }]],
+  ["an empty list", []],
+]) {
+  test(`${name} is logged as unknown, without the row`, () => {
+    const result = run({ event: browserEvent(), insertFails: true, insertErrors });
+    const logged = result.logs.at(-1);
+    assert.equal(result.outcome, "failure");
+    assert.match(logged, /unknown/);
+    assert.ok(!logged.includes(UUID2) && !logged.includes("user_id"), logged);
+  });
+}
 
 test("a failed insert of a rejected event is logged too", () => {
   const result = run({ event: browserEvent({ page_path: 5 }), insertFails: true });
@@ -310,8 +357,12 @@ test("a failed insert of a rejected event is logged too", () => {
   assert.equal(JSON.parse(result.logs.at(-1)).table, "events_rejected");
 });
 
-test("the insert names no project and does not skip invalid rows", () => {
-  const result = run({ event: browserEvent() });
-  assert.equal("projectId" in result.inserts[0].connection, false);
+test("the insert names the configured project and does not skip invalid rows", () => {
+  const result = run({ event: browserEvent(), projectId: "huaben-tracking-platform-dev" });
+  assert.deepEqual(result.inserts[0].connection, {
+    projectId: "huaben-tracking-platform-dev",
+    datasetId: "analytics",
+    tableId: "events",
+  });
   assert.deepEqual(result.inserts[0].options, { ignoreUnknownValues: false, skipInvalidRows: false });
 });
