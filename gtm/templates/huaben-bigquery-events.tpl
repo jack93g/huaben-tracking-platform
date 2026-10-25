@@ -380,11 +380,13 @@ function validateConsent(consent) {
 
 function validateProperties(spec, properties) {
   if (getType(properties) !== 'object') return 'invalid_properties';
-  const given = Object.keys(properties);
-  for (let i = 0; i < given.length; i++) {
-    if (!spec.properties[given[i]]) return 'unknown_property:' + given[i];
-  }
   const names = Object.keys(spec.properties);
+  const given = Object.keys(properties);
+  // Compared by name: a lookup like spec.properties[name] also finds inherited
+  // members such as `constructor`.
+  for (let i = 0; i < given.length; i++) {
+    if (names.indexOf(given[i]) === -1) return 'unknown_property:' + given[i];
+  }
   for (let i = 0; i < names.length; i++) {
     const reason = validateProperty(names[i], spec.properties[names[i]], properties[names[i]]);
     if (reason !== null) return reason;

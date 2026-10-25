@@ -274,6 +274,8 @@ for (const [name, overrides, reason] of [
   ["a fractional count", { properties: { ...backendEvent().properties, attempt_count: 1.5 } }, "invalid_property:attempt_count"],
   ["a boolean that is a string", { properties: { ...backendEvent().properties, has_topic: "no" } }, "invalid_property:has_topic"],
   ["a property the contract does not have", { properties: { ...backendEvent().properties, topic: "secret" } }, "unknown_property:topic"],
+  ["an inherited object member as a property name", { properties: { ...backendEvent().properties, constructor: "x" } }, "unknown_property:constructor"],
+  ["another inherited member as a property name", { properties: { ...backendEvent().properties, toString: "x" } }, "unknown_property:toString"],
   ["properties that are not an object", { properties: "x" }, "invalid_properties"],
   ["a missing consent record", { consent: undefined }, "invalid_consent"],
   ["a consent value that is not granted or denied", { consent: { analytics_storage: "maybe" } }, "invalid_consent"],

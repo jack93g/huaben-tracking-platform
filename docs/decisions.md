@@ -625,9 +625,23 @@ This repository is public, so entries leave out individual account names, organi
 - **Consequences:**
   - Forged but well-formed `page_view` events, made-up identifiers, and bulk spam from outside a browser are not stopped.
   - Bulk spam is bounded by the tagging service's instance limit (D-033) and shows up in the budget alerts.
-  - A request with an `Origin` outside the site's hostnames is logged and not stored, so forged traffic can't fill `events_rejected` (D-040).
+  - A request with an `Origin` outside the site's hostnames is logged and not stored. That keeps casual misuse, such as another site's page posting events, out of `events_rejected` (D-040). It does not stop a request made outside a browser, which can send an allowed `Origin`.
   - A browser event whose `analytics_storage` isn't `granted` is rejected with the reason `consent_not_granted`. The spec says page views from visitors who decline are absent, not stored as denied.
   - Revisit if the load balancer is added after the MVP.
+
+### D-042: BigQuery access: dataset-level `dataEditor` for sGTM, and a custom role for the apply accounts
+
+*Accepted 2026-10-25 · TP-4 · follows D-013 and D-037*
+
+- **Decision:**
+  - The tagging service account gets `roles/bigquery.dataEditor` on the `analytics` dataset, and nothing on the project. The preview account gets nothing.
+  - The apply accounts get a custom role, `tfApplyBigQuery`, that manages datasets and tables and sets IAM on datasets. It has no permission to run jobs or queries.
+- **Why:**
+  - Writing rows with the streaming API needs `bigquery.tables.updateData`, which `dataEditor` includes. A narrower custom role for the runtime account would have to be created in the bootstrap, for one dataset, so it wasn't thought worth it.
+  - Dataset-level grants need no Project IAM Admin, so the apply accounts stay without it (D-013).
+- **Consequences:**
+  - `dataEditor` also carries `bigquery.tables.update` and `delete`. A compromised sGTM container could alter or drop `analytics.events`. Table deletion protection stops Terraform from doing it, but not that account. Revisit with a custom role if the container's exposure grows.
+  - `bigquery.datasets.setIamPolicy` applies to every dataset in the project, not only the ones the module manages. An apply account could give itself read access to any dataset there, such as the dbt datasets TP-6 adds, without being able to run a job. This is accepted for the same reason as in D-037: the account that creates a resource can already reach it, and the projects hold only this platform's data.
 
 ## Open
 

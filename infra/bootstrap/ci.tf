@@ -75,9 +75,9 @@ locals {
     }
     # The analytics dataset and its tables (TP-4). Access to the dataset is
     # granted on the dataset, not the project, so no Project IAM Admin is
-    # needed. `datasets.setIamPolicy` lets an apply account give itself access
-    # to the data in the datasets it manages; the project holds nothing else.
-    # No job or query permissions: Terraform doesn't read or load data.
+    # needed. `datasets.setIamPolicy` applies to every dataset in the project,
+    # so an apply account could give itself access to data in any of them
+    # (D-042). No job or query permissions: Terraform doesn't read or load data.
     tfApplyBigQuery = {
       title       = "Terraform apply: manage BigQuery datasets and tables"
       description = "Create and manage datasets and tables, and set who can access a dataset. Cannot run jobs."
