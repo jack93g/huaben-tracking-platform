@@ -80,3 +80,27 @@ def test_every_case_expects_something_the_template_can_produce():
     allowed = ("stored", "absent", "rejected:")
     assert all(c.expect.startswith(allowed) for c in script.CASES)
     assert len({c.name for c in script.CASES}) == len(script.CASES)
+
+
+def test_the_page_location_uses_the_site_origin():
+    sent = params(case("valid"), site_origin="https://huaben.app")
+    assert sent["dl"] == "https://huaben.app/tp4-test/run1/valid"
+
+
+def test_a_case_sends_the_site_origin_unless_it_is_about_another():
+    assert script.request_origin(case("valid"), "https://huaben.app") == "https://huaben.app"
+    assert script.request_origin(case("foreign-origin"), "https://huaben.app") == "https://evil.example"
+
+
+def test_only_selects_cases_by_name():
+    assert [c.name for c in script.select_cases("valid, bad-event-id")] == ["valid", "bad-event-id"]
+    assert script.select_cases(None) == script.CASES
+
+
+def test_only_refuses_a_name_that_is_not_a_case():
+    try:
+        script.select_cases("valid,nope")
+    except ValueError as error:
+        assert "nope" in str(error)
+    else:
+        raise AssertionError("expected a ValueError")

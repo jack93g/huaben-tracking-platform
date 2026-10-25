@@ -3,11 +3,17 @@
     python scripts/send_test_events.py                 # dev: the cases, then the check
     python scripts/send_test_events.py --burst 30      # also send 30 valid events at once
     python scripts/send_test_events.py --no-check      # send only; skip the BigQuery check
+    python scripts/send_test_events.py --only valid,bad-event-id   # only these cases
+
+    # One event to another environment, e.g. prod, from the site's own origin:
+    python scripts/send_test_events.py --allow-other-target --only valid-anonymous \\
+        --url https://tracking.huaben.app --project huaben-tracking-platform-prod \\
+        --origin https://huaben.app
 
 It posts GA4-shaped requests to the browser path, the way Google's tag does (D-027), and
 then queries BigQuery with the `bq` CLI for the rows each case should have produced. Every
 event's page path starts with /tp4-test/<run id>/, which is how its rows are found. Test
-rows stay in dev's tables until their partitions expire.
+rows stay in the tables until their partitions expire: against prod, send as few as you can.
 
 The backend path can't be tested here: it needs the custom client (TP-5).
 Needs `gcloud auth login` for the check. Standard library only.
@@ -119,7 +125,15 @@ CASES = [
 ]
 
 
-def build_url(case: Case, run_id: str, *, base_url: str, measurement_id: str, burst_index: int | None = None) -> str:
+def build_url(
+    case: Case,
+    run_id: str,
+    *,
+    base_url: str,
+    measurement_id: str,
+    site_origin: str = DEV_ORIGIN,
+    burst_index: int | None = None,
+) -> str:
     name = f"burst-{burst_index}" if burst_index is not None else case.name
     params: dict[str, str | None] = {
         "v": "2",
@@ -138,13 +152,28 @@ def build_url(case: Case, run_id: str, *, base_url: str, measurement_id: str, bu
         "ep.event_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
         "ep.anonymous_id": uuid4(),
         "ep.app_session_id": uuid4(),
-        "dl": f"{DEV_ORIGIN}/tp4-test/{run_id}/{name}",
+        "dl": f"{site_origin}/tp4-test/{run_id}/{name}",
         "dp": f"/tp4-test/{run_id}/{name}",
         "dt": "tp4 test",
     }
     params.update(case.params)
     query = urllib.parse.urlencode({key: value for key, value in params.items() if value is not None})
     return f"{base_url.rstrip('/')}/g/collect?{query}"
+
+
+def request_origin(case: Case, site_origin: str) -> str | None:
+    """The Origin a case sends: the site's own, unless the case is about a different one."""
+    return site_origin if case.origin == DEV_ORIGIN else case.origin
+
+
+def select_cases(only: str | None) -> list[Case]:
+    if not only:
+        return CASES
+    names = [name.strip() for name in only.split(",") if name.strip()]
+    unknown = [name for name in names if name not in {case.name for case in CASES}]
+    if unknown:
+        raise ValueError(f"unknown case {', '.join(unknown)}; the cases are {', '.join(c.name for c in CASES)}")
+    return [case for case in CASES if case.name in names]
 
 
 def send(url: str, origin: str | None) -> int:
@@ -224,7 +253,7 @@ def leaks(rows: list[dict]) -> list[str]:
     )
 
 
-def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait: int) -> bool:
+def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait: int, *, user_id: str = "9999") -> bool:
     print(f"\nWaiting for BigQuery (up to {wait}s)...")
     deadline = time.time() + wait
     while True:
@@ -248,18 +277,19 @@ def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait:
         checks = {
             "source is frontend": row["source"] == "frontend",
             "consent is granted": row["consent"] == "granted",
-            "user_id is kept": row["user_id"] == "9999",
+            "user_id is kept": row["user_id"] == user_id,
             "session_id is kept": bool(row["session_id"]),
         }
         for label, passed in checks.items():
             ok &= passed
             print(f"valid row: {label:30} {'ok' if passed else 'FAILED'}")
 
-    print(
-        "impossible-date: check the log for a bigquery_insert_failed entry:\n"
-        "  gcloud logging read 'resource.labels.service_name=\"sgtm-tagging\" AND jsonPayload.type=\"bigquery_insert_failed\"'"
-        f" --project={project} --freshness=10m --limit=3"
-    )
+    if "impossible-date" in expected:
+        print(
+            "impossible-date: check the log for a bigquery_insert_failed entry:\n"
+            "  gcloud logging read 'resource.labels.service_name=\"sgtm-tagging\" AND jsonPayload.type=\"bigquery_insert_failed\"'"
+            f" --project={project} --freshness=10m --limit=3"
+        )
     found = leaks(list(stored.values()) + list(rejected.values()))
     ok &= not found
     print(f"Google's own details in stored rows: {'none (ok)' if not found else 'FOUND: ' + ', '.join(found)}")
@@ -276,6 +306,8 @@ def main() -> int:
     parser.add_argument("--url", default=DEV_URL, help="the tagging service (default: dev)")
     parser.add_argument("--project", default=DEV_PROJECT, help="the GCP project to check")
     parser.add_argument("--measurement-id", default="G-TEST000000", help="any value: the GA4 client doesn't check it")
+    parser.add_argument("--origin", default=DEV_ORIGIN, help="the site's origin, sent as Origin (default: the local dev server)")
+    parser.add_argument("--only", help="comma-separated case names to send, instead of all of them")
     parser.add_argument("--burst", type=int, default=0, help="also send this many valid events at once")
     parser.add_argument("--wait", type=int, default=90, help="seconds to wait for rows to appear")
     parser.add_argument("--no-check", action="store_true", help="send only; skip the BigQuery check")
@@ -295,26 +327,33 @@ def main() -> int:
         )
         return 2
 
-    run_id = uuid.uuid4().hex[:8]
-    print(f"Run {run_id}, sending to {args.url}")
-    base = {"base_url": args.url, "measurement_id": args.measurement_id}
+    try:
+        cases = select_cases(args.only)
+    except ValueError as error:
+        print(error, file=sys.stderr)
+        return 2
 
-    for case in CASES:
-        status = send(build_url(case, run_id, **base), case.origin)
+    run_id = uuid.uuid4().hex[:8]
+    print(f"Run {run_id}, sending to {args.url} as {args.origin}")
+    base = {"base_url": args.url, "measurement_id": args.measurement_id, "site_origin": args.origin}
+
+    for case in cases:
+        status = send(build_url(case, run_id, **base), request_origin(case, args.origin))
         print(f"  {case.name:22} HTTP {status}  {case.why}")
 
     burst_case = Case("burst", "a valid event in a burst", "stored")
     if args.burst:
         urls = [build_url(burst_case, run_id, burst_index=i, **base) for i in range(args.burst)]
         with ThreadPoolExecutor(max_workers=10) as pool:
-            statuses = list(pool.map(lambda url: send(url, DEV_ORIGIN), urls))
+            statuses = list(pool.map(lambda url: send(url, args.origin), urls))
         print(f"  burst: {args.burst} events sent, HTTP statuses {sorted(set(statuses))}")
 
     if args.no_check:
         print(f"\nFind the rows with page paths starting /tp4-test/{run_id}/")
         return 0
     try:
-        return 0 if check(args.project, run_id, {case.name: case.expect for case in CASES}, args.burst, args.wait) else 1
+        expected = {case.name: case.expect for case in cases}
+        return 0 if check(args.project, run_id, expected, args.burst, args.wait) else 1
     except RuntimeError as error:
         print(f"\nThe BigQuery check failed: {error}", file=sys.stderr)
         return 1
