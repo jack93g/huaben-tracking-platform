@@ -4,6 +4,16 @@
       "containerId": "283386687",
       "name": "Event Name",
       "type": "eventName"
+    },
+    {
+      "containerId": "283386687",
+      "name": "Request Path",
+      "type": "requestPath"
+    },
+    {
+      "containerId": "283386687",
+      "name": "Client Name",
+      "type": "clientName"
     }
   ],
   "client": [
@@ -77,5 +87,137 @@
     ]
   },
   "containerId": "283386687",
-  "containerVersionId": "1"
+  "containerVersionId": "3",
+  "customTemplate": [
+    {
+      "containerId": "283386687",
+      "name": "Huaben BigQuery events",
+      "templateData": "___INFO___\n\n{\n  \"type\": \"TAG\",\n  \"id\": \"cvt_temp_public_id\",\n  \"version\": 1,\n  \"securityGroups\": [],\n  \"displayName\": \"Huaben BigQuery events\",\n  \"categories\": [\n    \"ANALYTICS\"\n  ],\n  \"description\": \"Maps an event to the tracking contract\\u0027s row, validates it, and writes it to analytics.events. An event that fails validation goes to analytics.events_rejected instead (D-040).\",\n  \"containerContexts\": [\n    \"SERVER\"\n  ]\n}\n\n\n___TEMPLATE_PARAMETERS___\n\n[\n  {\n    \"type\": \"SELECT\",\n    \"name\": \"path\",\n    \"displayName\": \"Path\",\n    \"macrosInSelect\": false,\n    \"selectItems\": [\n      {\n        \"value\": \"frontend\",\n        \"displayValue\": \"Browser events (the GA4 client)\"\n      },\n      {\n        \"value\": \"backend\",\n        \"displayValue\": \"Backend events (the custom client)\"\n      }\n    ],\n    \"simpleValueType\": true,\n    \"defaultValue\": \"frontend\",\n    \"help\": \"Which client\\u0027s events this tag handles. Use one tag per path, each with a trigger on its own client.\"\n  },\n  {\n    \"type\": \"TEXT\",\n    \"name\": \"projectId\",\n    \"displayName\": \"BigQuery project ID\",\n    \"simpleValueType\": true,\n    \"help\": \"The environment\\u0027s GCP project, e.g. huaben-tracking-platform-dev. Use a constant variable that differs per environment. The template\\u0027s BigQuery permission must allow this project.\",\n    \"valueValidators\": [\n      {\n        \"type\": \"NON_EMPTY\"\n      }\n    ]\n  },\n  {\n    \"type\": \"TEXT\",\n    \"name\": \"allowedOrigins\",\n    \"displayName\": \"Allowed origins\",\n    \"simpleValueType\": true,\n    \"help\": \"Comma-separated, e.g. https://huaben.app,https://www.huaben.app. A browser event from any other Origin is logged and not stored (D-041). Use a constant variable that differs per environment.\",\n    \"enablingConditions\": [\n      {\n        \"paramName\": \"path\",\n        \"paramValue\": \"frontend\",\n        \"type\": \"EQUALS\"\n      }\n    ],\n    \"valueValidators\": [\n      {\n        \"type\": \"NON_EMPTY\"\n      }\n    ]\n  }\n]\n\n\n___SANDBOXED_JS_FOR_SERVER___\n\nconst BigQuery = require('BigQuery');\nconst getAllEventData = require('getAllEventData');\nconst getRequestHeader = require('getRequestHeader');\nconst getTimestampMillis = require('getTimestampMillis');\nconst getType = require('getType');\nconst JSON = require('JSON');\nconst logToConsole = require('logToConsole');\nconst makeInteger = require('makeInteger');\nconst makeString = require('makeString');\nconst Math = require('Math');\nconst Object = require('Object');\n\n// The contract (D-018) is generated into this block by\n// scripts/generate_contract.py. Do not edit it by hand.\n// BEGIN GENERATED CONTRACT\nconst CONTRACT_VERSION = \"1.0.1\";\nconst SOURCE_FIELDS = [\"event_id\", \"event_name\", \"schema_version\", \"source\", \"event_timestamp\", \"user_id\", \"anonymous_id\", \"session_id\", \"consent\", \"properties\"];\nconst EVENTS = {\n  \"page_view\": {\n    \"source\": \"frontend\",\n    \"properties\": {\n      \"page_location\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"page_path\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"page_title\": {\n        \"type\": \"string\",\n        \"required\": false\n      },\n      \"page_referrer\": {\n        \"type\": \"string\",\n        \"required\": false\n      }\n    }\n  },\n  \"story_generated\": {\n    \"source\": \"backend\",\n    \"properties\": {\n      \"story_id\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"generation_request_id\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"target_hsk_level\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 1,\n        \"maximum\": 6\n      },\n      \"target_word_count\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 1\n      },\n      \"target_vocabulary_count\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 1\n      },\n      \"has_topic\": {\n        \"type\": \"boolean\",\n        \"required\": true\n      },\n      \"provider\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"model\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"prompt_version\": {\n        \"type\": \"string\",\n        \"required\": false\n      },\n      \"attempt_count\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 1\n      },\n      \"total_tokens\": {\n        \"type\": \"integer\",\n        \"required\": false,\n        \"minimum\": 0\n      },\n      \"latency_ms\": {\n        \"type\": \"integer\",\n        \"required\": false,\n        \"minimum\": 0\n      }\n    }\n  },\n  \"login\": {\n    \"source\": \"backend\",\n    \"properties\": {\n      \"method\": {\n        \"type\": \"string\",\n        \"required\": true,\n        \"enum\": [\n          \"password\"\n        ]\n      }\n    }\n  },\n  \"quiz_submitted\": {\n    \"source\": \"backend\",\n    \"properties\": {\n      \"story_id\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"quiz_attempt_id\": {\n        \"type\": \"string\",\n        \"required\": true\n      },\n      \"question_count\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 1\n      },\n      \"correct_count\": {\n        \"type\": \"integer\",\n        \"required\": true,\n        \"minimum\": 0\n      }\n    }\n  }\n};\n// END GENERATED CONTRACT\n\nconst DATASET = 'analytics';\nconst EVENTS_TABLE = 'events';\nconst REJECTED_TABLE = 'events_rejected';\n\n// Limits on what a sender can post (D-041).\nconst MAX_STRING = 2048;\nconst MAX_ID = 64;\nconst MAX_PAYLOAD = 8000;\n\n// --- Writing ---------------------------------------------------------------\n\nfunction insert(table, row, eventId, done) {\n  BigQuery.insert(\n    // The permission only allows a call that names its project, so the project\n    // comes from a per-environment variable, like the allowed origins.\n    {projectId: data.projectId, datasetId: DATASET, tableId: table},\n    [row],\n    {ignoreUnknownValues: false, skipInvalidRows: false},\n    function() {\n      done(true);\n    },\n    function(errors) {\n      // TP-8's alert fires on this entry.\n      logToConsole(JSON.stringify({type: 'bigquery_insert_failed', table: table, event_id: eventId, error: errorReasons(errors)}));\n      done(false);\n    }\n  );\n}\n\n// The properties column is JSON, and the streaming insert wants a JSON column's\n// value as a string. An object would be read as a RECORD and refused.\nfunction storedRow(row) {\n  const stored = {};\n  const names = Object.keys(row);\n  for (let i = 0; i < names.length; i++) stored[names[i]] = row[names[i]];\n  stored.properties = JSON.stringify(row.properties);\n  return stored;\n}\n\n// BigQuery's error for a row echoes the whole row back, with the user's\n// identifiers, and its messages can quote values. Logs outlive an erasure\n// request (D-022), so only the reasons and field names are logged.\nfunction errorReasons(errors) {\n  // Anything unexpected is reported as unknown, never passed through: it\n  // could be, or contain, the row.\n  const unknown = [{reason: 'unknown', field: ''}];\n  if (getType(errors) !== 'array') return unknown;\n  const reasons = [];\n  for (let i = 0; i < errors.length; i++) {\n    const item = errors[i];\n    const inner = getType(item) === 'object' && getType(item.errors) === 'array' ? item.errors : [item];\n    for (let j = 0; j < inner.length; j++) {\n      const error = inner[j];\n      if (getType(error) !== 'object') {\n        reasons.push(unknown[0]);\n      } else {\n        // Not the message: BigQuery's wording can quote the value that failed.\n        // The field's name is enough to find the problem.\n        reasons.push({\n          reason: isString(error.reason) ? error.reason : 'unknown',\n          field: isString(error.location) && error.location.length <= 100 ? error.location : ''\n        });\n      }\n    }\n  }\n  return reasons.length > 0 ? reasons : unknown;\n}\n\nfunction rejectedRow(reason) {\n  let source = eventData;\n  if (path === 'frontend') {\n    // The browser path also carries Google's own details: the IP address,\n    // client ID, user agent, and more. None of it is stored, so only the\n    // contract's own keys are kept.\n    source = {};\n    const keys = payloadKeys();\n    for (let i = 0; i < keys.length; i++) {\n      if (eventData[keys[i]] !== undefined) source[keys[i]] = eventData[keys[i]];\n    }\n  }\n  let payload = JSON.stringify(source);\n  const truncated = payload.length > MAX_PAYLOAD;\n  if (truncated) payload = payload.substring(0, MAX_PAYLOAD);\n  return {\n    received_at: receivedAtSeconds,\n    reason: reason,\n    source: path === 'frontend' || path === 'backend' ? path : 'unknown',\n    event_id: safeId(eventData.event_id),\n    payload: payload,\n    payload_truncated: truncated\n  };\n}\n\nfunction payloadKeys() {\n  const keys = SOURCE_FIELDS.concat(['app_session_id']);\n  const names = Object.keys(EVENTS);\n  for (let i = 0; i < names.length; i++) {\n    const properties = Object.keys(EVENTS[names[i]].properties);\n    for (let j = 0; j < properties.length; j++) {\n      if (keys.indexOf(properties[j]) === -1) keys.push(properties[j]);\n    }\n  }\n  return keys;\n}\n\n// An event_id is not trusted until it has been validated.\nfunction safeId(value) {\n  return getType(value) === 'string' && value.length <= MAX_ID ? value : null;\n}\n\n// --- Mapping ---------------------------------------------------------------\n\nfunction orNull(value) {\n  return value === undefined ? null : value;\n}\n\n// The GA4 client's event, in GA4's shape, to the contract's row (D-027).\n// Only the contract's fields are copied. The rest of the request (the client\n// ID, IP address, region, screen size, language, browser details) is dropped.\nfunction mapBrowserEvent(e) {\n  const properties = {};\n  if (isKnownEvent(e.event_name)) {\n    const names = Object.keys(EVENTS[e.event_name].properties);\n    for (let i = 0; i < names.length; i++) {\n      if (e[names[i]] !== undefined) properties[names[i]] = e[names[i]];\n    }\n  }\n  return {\n    event_id: orNull(e.event_id),\n    event_name: orNull(e.event_name),\n    schema_version: orNull(e.schema_version),\n    source: 'frontend',\n    event_timestamp: orNull(e.event_timestamp),\n    server_timestamp: receivedAtSeconds,\n    user_id: getType(e.user_id) === 'number' ? makeString(e.user_id) : orNull(e.user_id),\n    anonymous_id: orNull(e.anonymous_id),\n    // Sent as app_session_id, because Google's tag takes session_id as its own.\n    session_id: orNull(e.app_session_id),\n    // Only analytics_storage is known; the other signals stay null (spec).\n    consent: {analytics_storage: analyticsStorageGranted(e) ? 'granted' : 'denied'},\n    properties: properties\n  };\n}\n\n// Server containers have no consent API. The GA4 client puts Google's consent\n// state in the event data as x-ga-gcs: G1, then ad_storage and analytics_storage\n// as 1 (granted) or 0 (denied), e.g. G101. Missing or malformed counts as denied.\nfunction analyticsStorageGranted(e) {\n  const gcs = e['x-ga-gcs'];\n  return isString(gcs) && gcs.length === 4 && gcs.substring(0, 2) === 'G1' &&\n    '01'.indexOf(gcs.charAt(2)) !== -1 && gcs.charAt(3) === '1';\n}\n\n// The backend's event arrives in the contract's shape, without server_timestamp.\nfunction mapBackendEvent(e) {\n  return {\n    event_id: orNull(e.event_id),\n    event_name: orNull(e.event_name),\n    schema_version: orNull(e.schema_version),\n    source: orNull(e.source),\n    event_timestamp: orNull(e.event_timestamp),\n    server_timestamp: receivedAtSeconds,\n    user_id: orNull(e.user_id),\n    anonymous_id: orNull(e.anonymous_id),\n    session_id: orNull(e.session_id),\n    consent: orNull(e.consent),\n    properties: orNull(e.properties)\n  };\n}\n\n// --- Origin ----------------------------------------------------------------\n\nfunction originAllowed() {\n  let origin = getRequestHeader('origin');\n  if (!origin) {\n    // A request without an Origin (an image request, say) is judged by its Referer.\n    const referer = getRequestHeader('referer');\n    if (referer) {\n      const parts = referer.split('/');\n      if (parts.length >= 3) origin = parts[0] + '//' + parts[2];\n    }\n  }\n  if (!origin) return false;\n  const allowed = (data.allowedOrigins || '').split(',');\n  for (let i = 0; i < allowed.length; i++) {\n    if (allowed[i].trim() === origin) return true;\n  }\n  return false;\n}\n\n// --- Validation ------------------------------------------------------------\n\n// Returns the reason a row is rejected, or null when it is valid. The reasons\n// are short codes, so they can be counted.\nfunction validate(row) {\n  if (!isKnownEvent(row.event_name)) return 'unknown_event_name';\n  const spec = EVENTS[row.event_name];\n  if (spec.source !== path) return 'event_not_allowed_on_' + path + '_path';\n  if (!isUuid4(row.event_id)) return 'invalid_event_id';\n  if (!isCompatibleVersion(row.schema_version)) return 'invalid_schema_version';\n  if (row.source !== path) return 'invalid_source';\n  if (!isTimestamp(row.event_timestamp)) return 'invalid_event_timestamp';\n  if (row.user_id !== null && !(isString(row.user_id) && row.user_id.length >= 1 && row.user_id.length <= MAX_ID)) {\n    return 'invalid_user_id';\n  }\n  if (row.anonymous_id !== null && !isUuid4(row.anonymous_id)) return 'invalid_anonymous_id';\n  if (row.session_id !== null && !isUuid4(row.session_id)) return 'invalid_session_id';\n  const consentReason = validateConsent(row.consent);\n  if (consentReason !== null) return consentReason;\n  return validateProperties(spec, row.properties);\n}\n\nfunction validateConsent(consent) {\n  if (getType(consent) !== 'object') return 'invalid_consent';\n  if (!isOneOf(consent.analytics_storage, ['granted', 'denied'])) return 'invalid_consent';\n  const optional = ['ad_storage', 'ad_user_data', 'ad_personalization'];\n  for (let i = 0; i < optional.length; i++) {\n    const value = consent[optional[i]];\n    if (value !== undefined && value !== null && !isOneOf(value, ['granted', 'denied'])) return 'invalid_consent';\n  }\n  // Consent Mode blocks the browser tag until analytics_storage is granted\n  // (D-027), so a browser event that says otherwise did not come from it.\n  if (path === 'frontend' && consent.analytics_storage !== 'granted') return 'consent_not_granted';\n  return null;\n}\n\nfunction validateProperties(spec, properties) {\n  if (getType(properties) !== 'object') return 'invalid_properties';\n  const names = Object.keys(spec.properties);\n  const given = Object.keys(properties);\n  // Compared by name: a lookup like spec.properties[name] also finds inherited\n  // members such as `constructor`.\n  for (let i = 0; i < given.length; i++) {\n    if (names.indexOf(given[i]) === -1) return 'unknown_property:' + given[i];\n  }\n  for (let i = 0; i < names.length; i++) {\n    const reason = validateProperty(names[i], spec.properties[names[i]], properties[names[i]]);\n    if (reason !== null) return reason;\n  }\n  return null;\n}\n\nfunction validateProperty(name, spec, value) {\n  if (value === undefined || value === null) return spec.required ? 'missing_property:' + name : null;\n  const type = getType(value);\n  const invalid = 'invalid_property:' + name;\n  if (spec.type === 'string') {\n    if (type !== 'string' || value.length > MAX_STRING) return invalid;\n    if (spec.enum && !isOneOf(value, spec.enum)) return invalid;\n  } else if (spec.type === 'integer' || spec.type === 'number') {\n    if (type !== 'number') return invalid;\n    if (spec.type === 'integer' && Math.floor(value) !== value) return invalid;\n    if (spec.minimum !== undefined && value < spec.minimum) return invalid;\n    if (spec.maximum !== undefined && value > spec.maximum) return invalid;\n  } else if (spec.type === 'boolean') {\n    if (type !== 'boolean') return invalid;\n  }\n  return null;\n}\n\nfunction isKnownEvent(name) {\n  return isString(name) && Object.keys(EVENTS).indexOf(name) !== -1;\n}\n\nfunction isString(value) {\n  return getType(value) === 'string';\n}\n\nfunction isOneOf(value, allowed) {\n  return isString(value) && allowed.indexOf(value) !== -1;\n}\n\nfunction isDigits(text) {\n  if (text.length === 0) return false;\n  for (let i = 0; i < text.length; i++) {\n    if ('0123456789'.indexOf(text.charAt(i)) === -1) return false;\n  }\n  return true;\n}\n\nfunction isUuid4(value) {\n  if (!isString(value) || value.length !== 36) return false;\n  for (let i = 0; i < 36; i++) {\n    const c = value.charAt(i);\n    if (i === 8 || i === 13 || i === 18 || i === 23) {\n      if (c !== '-') return false;\n    } else if ('0123456789abcdef'.indexOf(c) === -1) {\n      return false;\n    }\n  }\n  return value.charAt(14) === '4' && '89ab'.indexOf(value.charAt(19)) !== -1;\n}\n\n// Senders built against an earlier minor or patch version stay valid (D-018).\nfunction isCompatibleVersion(value) {\n  if (!isString(value) || value.length > 20) return false;\n  const parts = value.split('.');\n  return parts.length === 3 && isDigits(parts[0]) && isDigits(parts[1]) && isDigits(parts[2]) &&\n    parts[0] === CONTRACT_VERSION.split('.')[0];\n}\n\n// RFC 3339, e.g. 2026-10-04T09:30:00.123Z, with a Z or an offset.\nfunction isTimestamp(value) {\n  if (!isString(value) || value.length < 20 || value.length > 40) return false;\n  if (value.charAt(4) !== '-' || value.charAt(7) !== '-' || value.charAt(10) !== 'T' ||\n      value.charAt(13) !== ':' || value.charAt(16) !== ':') return false;\n  const parts = [\n    value.substring(0, 4), value.substring(5, 7), value.substring(8, 10),\n    value.substring(11, 13), value.substring(14, 16), value.substring(17, 19)\n  ];\n  for (let i = 0; i < parts.length; i++) {\n    if (!isDigits(parts[i])) return false;\n  }\n  const month = makeInteger(parts[1]);\n  const day = makeInteger(parts[2]);\n  if (month < 1 || month > 12 || day < 1 || day > 31) return false;\n  if (makeInteger(parts[3]) > 23 || makeInteger(parts[4]) > 59 || makeInteger(parts[5]) > 59) return false;\n  let rest = value.substring(19);\n  if (rest.charAt(0) === '.') {\n    let i = 1;\n    while (i < rest.length && '0123456789'.indexOf(rest.charAt(i)) !== -1) i++;\n    if (i === 1) return false;\n    rest = rest.substring(i);\n  }\n  if (rest === 'Z') return true;\n  return rest.length === 6 && '+-'.indexOf(rest.charAt(0)) !== -1 && rest.charAt(3) === ':' &&\n    isDigits(rest.substring(1, 3)) && isDigits(rest.substring(4, 6));\n}\n\n// --- Run -------------------------------------------------------------------\n\nconst path = data.path;\nconst eventData = getAllEventData();\nconst receivedAtSeconds = getTimestampMillis() / 1000;\n\nif (path === 'frontend' && !originAllowed()) {\n  // Not stored: forged traffic must not be able to fill events_rejected (D-041).\n  logToConsole(JSON.stringify({type: 'origin_rejected', origin: getRequestHeader('origin') || null}));\n  data.gtmOnSuccess();\n} else {\n  const row = path === 'frontend' ? mapBrowserEvent(eventData) : mapBackendEvent(eventData);\n  const reason = validate(row);\n  if (reason === null) {\n    insert(EVENTS_TABLE, storedRow(row), row.event_id, function(ok) {\n      if (ok) data.gtmOnSuccess(); else data.gtmOnFailure();\n    });\n  } else {\n    logToConsole(JSON.stringify({type: 'event_rejected', reason: reason, source: path}));\n    insert(REJECTED_TABLE, rejectedRow(reason), safeId(eventData.event_id), function(ok) {\n      if (ok) data.gtmOnSuccess(); else data.gtmOnFailure();\n    });\n  }\n}\n\n\n___SERVER_PERMISSIONS___\n\n[\n  {\n    \"instance\": {\n      \"key\": {\n        \"publicId\": \"read_request\",\n        \"versionId\": \"1\"\n      },\n      \"param\": [\n        {\n          \"key\": \"headerWhitelist\",\n          \"value\": {\n            \"type\": 2,\n            \"listItem\": [\n              {\n                \"type\": 3,\n                \"mapKey\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"headerName\"\n                  }\n                ],\n                \"mapValue\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"origin\"\n                  }\n                ]\n              },\n              {\n                \"type\": 3,\n                \"mapKey\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"headerName\"\n                  }\n                ],\n                \"mapValue\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"referer\"\n                  }\n                ]\n              }\n            ]\n          }\n        },\n        {\n          \"key\": \"headersAllowed\",\n          \"value\": {\n            \"type\": 8,\n            \"boolean\": true\n          }\n        },\n        {\n          \"key\": \"requestAccess\",\n          \"value\": {\n            \"type\": 1,\n            \"string\": \"specific\"\n          }\n        },\n        {\n          \"key\": \"headerAccess\",\n          \"value\": {\n            \"type\": 1,\n            \"string\": \"specific\"\n          }\n        },\n        {\n          \"key\": \"queryParameterAccess\",\n          \"value\": {\n            \"type\": 1,\n            \"string\": \"any\"\n          }\n        }\n      ]\n    },\n    \"clientAnnotations\": {\n      \"isEditedByUser\": true\n    },\n    \"isRequired\": true\n  },\n  {\n    \"instance\": {\n      \"key\": {\n        \"publicId\": \"logging\",\n        \"versionId\": \"1\"\n      },\n      \"param\": [\n        {\n          \"key\": \"environments\",\n          \"value\": {\n            \"type\": 1,\n            \"string\": \"all\"\n          }\n        }\n      ]\n    },\n    \"clientAnnotations\": {\n      \"isEditedByUser\": true\n    },\n    \"isRequired\": true\n  },\n  {\n    \"instance\": {\n      \"key\": {\n        \"publicId\": \"read_event_data\",\n        \"versionId\": \"1\"\n      },\n      \"param\": [\n        {\n          \"key\": \"eventDataAccess\",\n          \"value\": {\n            \"type\": 1,\n            \"string\": \"any\"\n          }\n        }\n      ]\n    },\n    \"clientAnnotations\": {\n      \"isEditedByUser\": true\n    },\n    \"isRequired\": true\n  },\n  {\n    \"instance\": {\n      \"key\": {\n        \"publicId\": \"access_bigquery\",\n        \"versionId\": \"1\"\n      },\n      \"param\": [\n        {\n          \"key\": \"allowedTables\",\n          \"value\": {\n            \"type\": 2,\n            \"listItem\": [\n              {\n                \"type\": 3,\n                \"mapKey\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"projectId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"datasetId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"tableId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"operation\"\n                  }\n                ],\n                \"mapValue\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"huaben-tracking-platform-prod\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"analytics\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"events\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"write\"\n                  }\n                ]\n              },\n              {\n                \"type\": 3,\n                \"mapKey\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"projectId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"datasetId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"tableId\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"operation\"\n                  }\n                ],\n                \"mapValue\": [\n                  {\n                    \"type\": 1,\n                    \"string\": \"huaben-tracking-platform-prod\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"analytics\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"events_rejected\"\n                  },\n                  {\n                    \"type\": 1,\n                    \"string\": \"write\"\n                  }\n                ]\n              }\n            ]\n          }\n        }\n      ]\n    },\n    \"clientAnnotations\": {\n      \"isEditedByUser\": true\n    },\n    \"isRequired\": true\n  }\n]\n\n\n___TESTS___\n\nscenarios: []\n\n\n___NOTES___\n\nThe contract block is generated: run `python scripts/generate_contract.py` after editing contract/events.yaml.\nThe permissions this template needs are listed in gtm/templates/README.md.\n\n\n",
+      "templateId": "6"
+    }
+  ],
+  "description": "Updated the \"GA4 client events\" trigger event name filter condition from equals \".+\" to regex matches \".+\".",
+  "name": "Update event filter type in GA4 client events trigger",
+  "tag": [
+    {
+      "consentSettings": {
+        "consentStatus": "notSet"
+      },
+      "containerId": "283386687",
+      "firingTriggerId": [
+        "7"
+      ],
+      "monitoringMetadata": {
+        "type": "map"
+      },
+      "name": "Huaben events - browser",
+      "parameter": [
+        {
+          "key": "path",
+          "type": "template",
+          "value": "frontend"
+        },
+        {
+          "key": "allowedOrigins",
+          "type": "template",
+          "value": "{{Allowed Origins}}"
+        },
+        {
+          "key": "projectId",
+          "type": "template",
+          "value": "{{Bq Project ID}}"
+        }
+      ],
+      "tagFiringOption": "oncePerEvent",
+      "tagId": "8",
+      "type": "cvt_283386687_6"
+    }
+  ],
+  "trigger": [
+    {
+      "containerId": "283386687",
+      "customEventFilter": [
+        {
+          "parameter": [
+            {
+              "key": "arg0",
+              "type": "template",
+              "value": "{{_event}}"
+            },
+            {
+              "key": "arg1",
+              "type": "template",
+              "value": ".+"
+            }
+          ],
+          "type": "matchRegex"
+        }
+      ],
+      "filter": [
+        {
+          "parameter": [
+            {
+              "key": "arg0",
+              "type": "template",
+              "value": "{{Request Path}}"
+            },
+            {
+              "key": "arg1",
+              "type": "template",
+              "value": "/g/collect"
+            }
+          ],
+          "type": "equals"
+        },
+        {
+          "parameter": [
+            {
+              "key": "arg0",
+              "type": "template",
+              "value": "{{Client Name}}"
+            },
+            {
+              "key": "arg1",
+              "type": "template",
+              "value": "GA4"
+            }
+          ],
+          "type": "equals"
+        }
+      ],
+      "name": "GA4 client events",
+      "triggerId": "7",
+      "type": "customEvent"
+    }
+  ],
+  "variable": [
+    {
+      "containerId": "283386687",
+      "formatValue": {},
+      "name": "Bq Project ID",
+      "parameter": [
+        {
+          "key": "value",
+          "type": "template",
+          "value": "huaben-tracking-platform-prod"
+        }
+      ],
+      "type": "c",
+      "variableId": "4"
+    },
+    {
+      "containerId": "283386687",
+      "formatValue": {},
+      "name": "Allowed Origins",
+      "parameter": [
+        {
+          "key": "value",
+          "type": "template",
+          "value": "https://huaben.app,https://www.huaben.app"
+        }
+      ],
+      "type": "c",
+      "variableId": "5"
+    }
+  ]
 }
