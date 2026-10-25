@@ -104,3 +104,13 @@ def test_only_refuses_a_name_that_is_not_a_case():
         assert "nope" in str(error)
     else:
         raise AssertionError("expected a ValueError")
+
+
+def test_only_refuses_an_empty_selection():
+    for empty in ("", " ", " , "):
+        try:
+            script.select_cases(empty)
+        except ValueError as error:
+            assert "at least one" in str(error)
+        else:
+            raise AssertionError(f"expected a ValueError for {empty!r}")

@@ -167,9 +167,11 @@ def request_origin(case: Case, site_origin: str) -> str | None:
 
 
 def select_cases(only: str | None) -> list[Case]:
-    if not only:
+    if only is None:
         return CASES
     names = [name.strip() for name in only.split(",") if name.strip()]
+    if not names:
+        raise ValueError("--only needs at least one case name")
     unknown = [name for name in names if name not in {case.name for case in CASES}]
     if unknown:
         raise ValueError(f"unknown case {', '.join(unknown)}; the cases are {', '.join(c.name for c in CASES)}")
@@ -253,7 +255,7 @@ def leaks(rows: list[dict]) -> list[str]:
     )
 
 
-def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait: int, *, user_id: str = "9999") -> bool:
+def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait: int) -> bool:
     print(f"\nWaiting for BigQuery (up to {wait}s)...")
     deadline = time.time() + wait
     while True:
@@ -277,7 +279,7 @@ def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait:
         checks = {
             "source is frontend": row["source"] == "frontend",
             "consent is granted": row["consent"] == "granted",
-            "user_id is kept": row["user_id"] == user_id,
+            "user_id is kept": row["user_id"] == "9999",
             "session_id is kept": bool(row["session_id"]),
         }
         for label, passed in checks.items():
