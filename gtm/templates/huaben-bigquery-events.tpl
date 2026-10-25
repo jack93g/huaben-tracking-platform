@@ -254,15 +254,27 @@ function storedRow(row) {
 // identifiers. Logs outlive an erasure request (D-022), so only the reasons
 // and messages are logged.
 function errorReasons(errors) {
-  if (getType(errors) !== 'array') return errors;
+  // Anything unexpected is reported as unknown, never passed through: it
+  // could be, or contain, the row.
+  const unknown = [{reason: 'unknown', message: ''}];
+  if (getType(errors) !== 'array') return unknown;
   const reasons = [];
   for (let i = 0; i < errors.length; i++) {
-    const inner = errors[i] && errors[i].errors ? errors[i].errors : [errors[i]];
+    const item = errors[i];
+    const inner = getType(item) === 'object' && getType(item.errors) === 'array' ? item.errors : [item];
     for (let j = 0; j < inner.length; j++) {
-      reasons.push({reason: inner[j].reason, message: inner[j].message});
+      const error = inner[j];
+      if (getType(error) !== 'object') {
+        reasons.push(unknown[0]);
+      } else {
+        reasons.push({
+          reason: isString(error.reason) ? error.reason : 'unknown',
+          message: isString(error.message) ? error.message.substring(0, 300) : ''
+        });
+      }
     }
   }
-  return reasons;
+  return reasons.length > 0 ? reasons : unknown;
 }
 
 function rejectedRow(reason) {

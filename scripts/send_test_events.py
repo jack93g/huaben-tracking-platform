@@ -208,14 +208,20 @@ def outcome(case_name: str, stored: dict, rejected: dict) -> str:
     return "absent"
 
 
+# Google's own details, by what they are. None may appear in a stored row.
+GOOGLE_DETAILS = {
+    "IP address": FAKE_IP,
+    "client ID": FAKE_CLIENT_ID,
+    "screen size": "2560x1440",
+    "language": "en-gb",
+}
+
+
 def leaks(rows: list[dict]) -> list[str]:
-    """Google's own details must not appear anywhere in a stored row."""
-    found = []
-    for row in rows:
-        for secret in (FAKE_IP, FAKE_CLIENT_ID, "2560x1440", "en-gb"):
-            if secret in row["whole_row"]:
-                found.append(secret)
-    return sorted(set(found))
+    """What Google sent that appears in a stored row, named by kind."""
+    return sorted(
+        {kind for row in rows for kind, value in GOOGLE_DETAILS.items() if value in row["whole_row"]}
+    )
 
 
 def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait: int) -> bool:
@@ -256,7 +262,7 @@ def check(project: str, run_id: str, expected: dict[str, str], burst: int, wait:
     )
     found = leaks(list(stored.values()) + list(rejected.values()))
     ok &= not found
-    print(f"Google's own details in stored rows: {'none (ok)' if not found else 'FOUND ' + ', '.join(found)}")
+    print(f"Google's own details in stored rows: {'none (ok)' if not found else 'FOUND: ' + ', '.join(found)}")
 
     if burst:
         count = sum(1 for name in stored if name.startswith("burst-"))
@@ -273,11 +279,20 @@ def main() -> int:
     parser.add_argument("--burst", type=int, default=0, help="also send this many valid events at once")
     parser.add_argument("--wait", type=int, default=90, help="seconds to wait for rows to appear")
     parser.add_argument("--no-check", action="store_true", help="send only; skip the BigQuery check")
-    parser.add_argument("--allow-prod", action="store_true", help="allow a prod URL or project")
+    parser.add_argument(
+        "--allow-other-target",
+        action="store_true",
+        help="allow a URL or project other than dev's, such as a Cloud Run URL or prod",
+    )
     args = parser.parse_args()
 
-    if not args.allow_prod and ("prod" in args.project or "//tracking.huaben.app" in args.url):
-        print("Refusing to write test events to prod. Pass --allow-prod if you mean it.", file=sys.stderr)
+    # Only dev's own target runs without being asked: test events must not reach prod by accident.
+    if not args.allow_other_target and (args.project != DEV_PROJECT or args.url.rstrip("/") != DEV_URL):
+        print(
+            f"Refusing to use {args.url} and project {args.project}: only dev's ({DEV_URL}, {DEV_PROJECT}) "
+            "is allowed. Pass --allow-other-target if you mean it.",
+            file=sys.stderr,
+        )
         return 2
 
     run_id = uuid.uuid4().hex[:8]

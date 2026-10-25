@@ -59,9 +59,21 @@ def test_outcome_reads_stored_then_rejected_then_absent():
     assert script.outcome("c", stored, rejected) == "absent"
 
 
-def test_leaks_finds_google_details_in_a_stored_row():
+def test_leaks_names_google_details_found_in_a_stored_row():
     assert script.leaks([{"whole_row": "{}"}]) == []
-    assert script.leaks([{"whole_row": f'{{"x": "{script.FAKE_IP}"}}'}]) == [script.FAKE_IP]
+    row = {"whole_row": f'{{"x": "{script.FAKE_IP}", "y": "{script.FAKE_CLIENT_ID}"}}'}
+    assert script.leaks([row]) == ["IP address", "client ID"]
+
+
+def test_only_dev_runs_without_being_asked(monkeypatch, capsys):
+    for argv in (
+        ["--project", "huaben-tracking-platform-prod"],
+        ["--url", "https://tracking.huaben.app"],
+        ["--url", "https://some-other-host.example"],
+    ):
+        monkeypatch.setattr("sys.argv", ["send_test_events.py", "--no-check", *argv])
+        assert script.main() == 2
+        assert "Refusing" in capsys.readouterr().err
 
 
 def test_every_case_expects_something_the_template_can_produce():

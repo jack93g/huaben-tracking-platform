@@ -329,6 +329,21 @@ test("the failed insert's log has the reason and none of the echoed row", () => 
   assert.ok(!logged.includes(UUID2) && !logged.includes('"user_id"'), logged);
 });
 
+for (const [name, insertErrors] of [
+  ["an error that is not a list", { row: { user_id: "2", anonymous_id: UUID2 } }],
+  ["an error that is a string", `row: ${UUID2}`],
+  ["a list with an empty entry", [null, { errors: [null], row: { user_id: "2" } }]],
+  ["an empty list", []],
+]) {
+  test(`${name} is logged as unknown, without the row`, () => {
+    const result = run({ event: browserEvent(), insertFails: true, insertErrors });
+    const logged = result.logs.at(-1);
+    assert.equal(result.outcome, "failure");
+    assert.match(logged, /unknown/);
+    assert.ok(!logged.includes(UUID2) && !logged.includes("user_id"), logged);
+  });
+}
+
 test("a failed insert of a rejected event is logged too", () => {
   const result = run({ event: browserEvent({ page_path: 5 }), insertFails: true });
   assert.equal(result.outcome, "failure");
