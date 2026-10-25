@@ -251,12 +251,12 @@ function storedRow(row) {
 }
 
 // BigQuery's error for a row echoes the whole row back, with the user's
-// identifiers. Logs outlive an erasure request (D-022), so only the reasons
-// and messages are logged.
+// identifiers, and its messages can quote values. Logs outlive an erasure
+// request (D-022), so only the reasons and field names are logged.
 function errorReasons(errors) {
   // Anything unexpected is reported as unknown, never passed through: it
   // could be, or contain, the row.
-  const unknown = [{reason: 'unknown', message: ''}];
+  const unknown = [{reason: 'unknown', field: ''}];
   if (getType(errors) !== 'array') return unknown;
   const reasons = [];
   for (let i = 0; i < errors.length; i++) {
@@ -267,9 +267,11 @@ function errorReasons(errors) {
       if (getType(error) !== 'object') {
         reasons.push(unknown[0]);
       } else {
+        // Not the message: BigQuery's wording can quote the value that failed.
+        // The field's name is enough to find the problem.
         reasons.push({
           reason: isString(error.reason) ? error.reason : 'unknown',
-          message: isString(error.message) ? error.message.substring(0, 300) : ''
+          field: isString(error.location) && error.location.length <= 100 ? error.location : ''
         });
       }
     }
@@ -358,7 +360,8 @@ function mapBrowserEvent(e) {
 // as 1 (granted) or 0 (denied), e.g. G101. Missing or malformed counts as denied.
 function analyticsStorageGranted(e) {
   const gcs = e['x-ga-gcs'];
-  return isString(gcs) && gcs.length === 4 && gcs.substring(0, 2) === 'G1' && gcs.charAt(3) === '1';
+  return isString(gcs) && gcs.length === 4 && gcs.substring(0, 2) === 'G1' &&
+    '01'.indexOf(gcs.charAt(2)) !== -1 && gcs.charAt(3) === '1';
 }
 
 // The backend's event arrives in the contract's shape, without server_timestamp.

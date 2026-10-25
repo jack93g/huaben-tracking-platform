@@ -226,6 +226,7 @@ for (const [name, gcs] of [
   ["no gcs parameter", null],
   ["a malformed gcs parameter", "G1"],
   ["a gcs parameter from another format", "G201"],
+  ["a malformed ad_storage digit", "G1a1"],
 ]) {
   test(`a browser event with ${name} is rejected as consent_not_granted`, () => {
     assert.equal(rejected({}, { gcs }).row.reason, "consent_not_granted");
@@ -317,16 +318,22 @@ test("a failed insert is logged with the event_id and the error, and the tag fai
   assert.equal(entry.type, "bigquery_insert_failed");
   assert.equal(entry.table, "events");
   assert.equal(entry.event_id, UUID);
-  assert.match(JSON.stringify(entry.error), /forced failure/);
+  assert.deepEqual(entry.error, [{ reason: "invalid", field: "" }]);
 });
 
-test("the failed insert's log has the reason and none of the echoed row", () => {
-  // BigQuery's error for a row repeats the row, identifiers included.
-  const echoed = [{ errors: [{ reason: "invalid", message: "bad timestamp" }], row: { user_id: "2", anonymous_id: UUID2 } }];
+test("the failed insert's log has the reason and field, and none of the echoed row or message", () => {
+  // BigQuery's error for a row repeats the row, identifiers included, and its message can quote a value.
+  const echoed = [
+    {
+      errors: [{ reason: "invalid", location: "event_timestamp", message: `bad value '${UUID2}'` }],
+      row: { user_id: "2", anonymous_id: UUID2 },
+    },
+  ];
   const result = run({ event: browserEvent(), insertFails: true, insertErrors: echoed });
   const logged = result.logs.at(-1);
-  assert.match(logged, /bad timestamp/);
-  assert.ok(!logged.includes(UUID2) && !logged.includes('"user_id"'), logged);
+  assert.match(logged, /"reason":"invalid"/);
+  assert.match(logged, /"field":"event_timestamp"/);
+  assert.ok(!logged.includes(UUID2) && !logged.includes("user_id") && !logged.includes("bad value"), logged);
 });
 
 for (const [name, insertErrors] of [
