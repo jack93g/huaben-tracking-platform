@@ -186,7 +186,7 @@ resource "google_cloud_run_v2_service" "tagging" {
           cpu    = "1"
           memory = "512Mi"
         }
-        # CPU only while handling a request (D-033). To be tested in TP-4.
+        # CPU only while handling a request (D-033). Tested in TP-4: inserts still complete.
         cpu_idle = true
       }
 
