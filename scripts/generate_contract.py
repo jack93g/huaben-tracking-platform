@@ -26,6 +26,9 @@ DBT_SOURCES = ROOT / "dbt" / "models" / "staging" / "_contract__sources.yml"
 PYTHON_PACKAGE = ROOT / "contract" / "python"
 PYTHON_MODELS = PYTHON_PACKAGE / "src" / "huaben_tracking_contract" / "models.py"
 PYTHON_PYPROJECT = PYTHON_PACKAGE / "pyproject.toml"
+GTM_TEMPLATE = ROOT / "gtm" / "templates" / "huaben-bigquery-events.tpl"
+TEMPLATE_BEGIN = "// BEGIN GENERATED CONTRACT\n"
+TEMPLATE_END = "// END GENERATED CONTRACT\n"
 
 HEADER = "Generated from contract/events.yaml by scripts/generate_contract.py. Do not edit."
 
@@ -335,6 +338,39 @@ packages = ["src/huaben_tracking_contract"]
 """
 
 
+# --- sGTM tag template ------------------------------------------------------
+
+
+def template_event(event: dict[str, Any]) -> dict[str, Any]:
+    properties = {}
+    for name, spec in (event.get("properties") or {}).items():
+        properties[name] = {
+            key: spec[key] for key in ("type", "required", "enum", "minimum", "maximum") if key in spec
+        }
+    return {"source": event["source"], "properties": properties}
+
+
+def render_gtm_template(contract: dict[str, Any]) -> str:
+    """The tag template with the contract's section rewritten.
+
+    The template validates events in sGTM (D-040, D-041), so it needs the event names, their
+    sources, and the property types. They are copied in, not written twice.
+    """
+    text = GTM_TEMPLATE.read_text()
+    start = text.find(TEMPLATE_BEGIN)
+    end = text.find(TEMPLATE_END)
+    if start == -1 or end < start:
+        raise ContractError(f"{GTM_TEMPLATE.relative_to(ROOT)} needs the BEGIN and END GENERATED CONTRACT markers")
+    source_fields = [f["name"] for f in contract["common_fields"] if f["set_by"] == "source"]
+    events = {name: template_event(event) for name, event in contract["events"].items()}
+    block = (
+        f"const CONTRACT_VERSION = {json.dumps(contract['version'])};\n"
+        f"const SOURCE_FIELDS = {json.dumps(source_fields)};\n"
+        f"const EVENTS = {json.dumps(events, indent=2)};\n"
+    )
+    return text[: start + len(TEMPLATE_BEGIN)] + block + text[end:]
+
+
 # ----------------------------------------------------------------------------
 
 
@@ -344,6 +380,7 @@ def render_all(contract: dict[str, Any]) -> dict[Path, str]:
         DBT_SOURCES: render_dbt_sources(contract),
         PYTHON_MODELS: render_python_models(contract),
         PYTHON_PYPROJECT: render_python_pyproject(contract),
+        GTM_TEMPLATE: render_gtm_template(contract),
     }
 
 

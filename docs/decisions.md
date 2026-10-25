@@ -600,14 +600,55 @@ This repository is public, so entries leave out individual account names, organi
   - The identity binding only trusts runs on `main` (D-037), so the workflow can't be tried from a branch. The first real run is a manual run on `main` after the merge.
   - A GitHub App could automate the pull request later. That is a new decision, and it needs the app's action added to the allowlist first.
 
+### D-040: Malformed events are written to an `events_rejected` table
+
+*Accepted 2026-10-24 · TP-4*
+
+- **Decision:** sGTM validates each event against the contract before inserting it. An event that fails is written to `analytics.events_rejected` with its raw payload and the reason, instead of to `analytics.events`. The table is partitioned by day and expires after 30 days (D-022).
+- **Why:** One bad row can fail a whole insert. Dropping it, or inserting with `skipInvalidRows`, would lose events without a trace. A rejects table keeps them for debugging and shows how often a sender gets the contract wrong.
+- **Consequences:**
+  - The raw payload can hold anything a sender posts, so the table is kept for 30 days only, and the payload is truncated.
+  - On the browser path the payload keeps only the contract's own keys. Google's tag also sends the IP address, client ID, user agent, region and more, none of which is stored anywhere.
+  - A failed insert into either table is logged with the `event_id` and the error, which TP-8's alert uses.
+
+### D-041: The browser path is guarded by validation, size limits, and an `Origin` check
+
+*Accepted 2026-10-24 · TP-4 · follows D-027*
+
+- **Decision:** On the GA4 client's path, which takes no secret, sGTM:
+  - validates each event against the contract: a known event name, UUID identifiers, and property types;
+  - limits string lengths and request size;
+  - checks the request's `Origin` against the site's hostnames.
+
+  Rate limiting is not added for the MVP.
+- **Why:** Validation and size limits keep malformed and oversized events out of the warehouse. The `Origin` check stops casual misuse, though it is trivially forged outside a browser. Rate limiting on Cloud Run needs Cloud Armor and so the load balancer (D-032), which the MVP doesn't have.
+- **Consequences:**
+  - Forged but well-formed `page_view` events, made-up identifiers, and bulk spam from outside a browser are not stopped.
+  - Bulk spam is bounded by the tagging service's instance limit (D-033) and shows up in the budget alerts.
+  - A request with an `Origin` outside the site's hostnames is logged and not stored. That keeps casual misuse, such as another site's page posting events, out of `events_rejected` (D-040). It does not stop a request made outside a browser, which can send an allowed `Origin`.
+  - A browser event whose `analytics_storage` isn't `granted` is rejected with the reason `consent_not_granted`. The spec says page views from visitors who decline are absent, not stored as denied.
+  - Revisit if the load balancer is added after the MVP.
+
+### D-042: BigQuery access: dataset-level `dataEditor` for sGTM, and a custom role for the apply accounts
+
+*Accepted 2026-10-25 · TP-4 · follows D-013 and D-037*
+
+- **Decision:**
+  - The tagging service account gets `roles/bigquery.dataEditor` on the `analytics` dataset, and nothing on the project. The preview account gets nothing.
+  - The apply accounts get a custom role, `tfApplyBigQuery`, that manages datasets and tables and sets IAM on datasets. It has no permission to run jobs or queries.
+- **Why:**
+  - Writing rows with the streaming API needs `bigquery.tables.updateData`, which `dataEditor` includes. A narrower custom role for the runtime account would have to be created in the bootstrap, for one dataset, so it wasn't thought worth it.
+  - Dataset-level grants need no Project IAM Admin, so the apply accounts stay without it (D-013).
+- **Consequences:**
+  - `dataEditor` also carries `bigquery.tables.update` and `delete`. A compromised sGTM container could alter or drop `analytics.events`. Table deletion protection stops Terraform from doing it, but not that account. Revisit with a custom role if the container's exposure grows.
+  - `bigquery.datasets.setIamPolicy` applies to every dataset in the project, not only the ones the module manages. An apply account could give itself read access to any dataset there, such as the dbt datasets TP-6 adds, without being able to run a job. This is accepted for the same reason as in D-037: the account that creates a resource can already reach it, and the projects hold only this platform's data.
+
 ## Open
 
 These are tracked in their tickets and move to **Accepted** once decided.
 
 | Decision | Ticket | Current recommendation |
 |---|---|---|
-| Behaviour for malformed events | TP-4 | An `events_rejected` table |
-| Guarding the browser path against forged events and spam (D-027) | TP-4 | Validate against the contract and limit sizes; accept the rest for the MVP |
 | Backend delivery | TP-5 | Postgres outbox, sent by the existing worker |
 | Which backend events are in the MVP | TP-5 | Only `story_generated` is required; `login` and `quiz_submitted` are already in the contract (D-017) |
 | Cleanup of per-PR dbt datasets | TP-6 | Open |

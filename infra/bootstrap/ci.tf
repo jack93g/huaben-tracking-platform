@@ -73,6 +73,28 @@ locals {
         "logging.exclusions.update",
       ]
     }
+    # The analytics dataset and its tables (TP-4). Access to the dataset is
+    # granted on the dataset, not the project, so no Project IAM Admin is
+    # needed. `datasets.setIamPolicy` applies to every dataset in the project,
+    # so an apply account could give itself access to data in any of them
+    # (D-042). No job or query permissions: Terraform doesn't read or load data.
+    tfApplyBigQuery = {
+      title       = "Terraform apply: manage BigQuery datasets and tables"
+      description = "Create and manage datasets and tables, and set who can access a dataset. Cannot run jobs."
+      permissions = [
+        "bigquery.datasets.create",
+        "bigquery.datasets.delete",
+        "bigquery.datasets.get",
+        "bigquery.datasets.getIamPolicy",
+        "bigquery.datasets.setIamPolicy",
+        "bigquery.datasets.update",
+        "bigquery.tables.create",
+        "bigquery.tables.delete",
+        "bigquery.tables.get",
+        "bigquery.tables.list",
+        "bigquery.tables.update",
+      ]
+    }
   }
 
   ci_apply_custom_role_bindings = merge([
